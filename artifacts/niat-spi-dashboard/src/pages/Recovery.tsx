@@ -12,7 +12,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PageHeader } from "@/components/PageHeader";
-import { PageLoader, ErrorState } from "@/components/PageStates";
+import { PageLoader } from "@/components/PageLoader";
+import { ErrorState } from "@/components/PageStates";
 import { AlertCircle, Loader2, Download } from "lucide-react";
 import { pctTextColor } from "@/lib/utils";
 import { exportCsv } from "@/lib/csv";
@@ -112,24 +113,34 @@ export default function Recovery() {
       return;
     }
 
-    const rows: Record<string, string>[] = [];
+    const headers = [
+      "Campus",
+      "Subject",
+      "Student ID",
+      "Student Name",
+      "Section",
+      "Attendance",
+      "Present/Total",
+    ];
+    const rows: (string | number)[][] = [];
     for (const subject of filteredData.subjects) {
       for (const student of subject.students) {
-        rows.push({
-          Campus: filteredData.campus,
-          Subject: subject.subjectTitle,
-          "Student ID": student.studentId,
-          "Student Name": student.studentName,
-          Section: student.sectionName || "-",
-          Attendance: `${student.attendancePct.toFixed(1)}%`,
-          "Present/Total": `${student.presentCount}/${student.totalCount}`,
-        });
+        rows.push([
+          filteredData.campus,
+          subject.subjectTitle,
+          student.studentId,
+          student.studentName,
+          student.sectionName || "-",
+          `${student.attendancePct.toFixed(1)}%`,
+          `${student.presentCount}/${student.totalCount}`,
+        ]);
       }
     }
 
     exportCsv(
-      rows,
       `recovery-${filteredData.campus}-${new Date().toISOString().split("T")[0]}.csv`,
+      headers,
+      rows,
     );
   };
 
@@ -144,7 +155,7 @@ export default function Recovery() {
     <div className="flex flex-col gap-6 p-6">
       <PageHeader
         title="Recovery Dashboard"
-        description="Students with attendance below 75% by subject"
+        subtitle="Students with attendance below 75% by subject"
       />
 
       {/* Campus Selector */}
@@ -185,9 +196,8 @@ export default function Recovery() {
       {/* Error State */}
       {error && !loading && (
         <ErrorState
-          title="Failed to load data"
           message={error}
-          action={
+          onRetry={
             selectedCampus
               ? () => setSelectedCampus(selectedCampus)
               : undefined

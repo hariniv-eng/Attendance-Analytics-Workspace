@@ -28,7 +28,7 @@ interface RecoveryStudent {
 interface RecoverySubjectCard {
   subjectTitle: string;
   attendancePct: number;
-  studentsBelow75Count: number;
+  studentsBelow80Count: number;
   students: RecoveryStudent[];
 }
 
@@ -153,7 +153,7 @@ export default function Recovery() {
     <div className="flex flex-col gap-6 p-6">
       <PageHeader
         title="Recovery Dashboard"
-        subtitle="Campus subject recovery based on subject-level attendance below 75%"
+        subtitle="Campus subject recovery based on subject-level attendance below 80%"
       />
 
       <div className="flex items-end gap-4">
@@ -220,7 +220,7 @@ export default function Recovery() {
           {recoveryData.subjects.length === 0 && (
             <div className="rounded-lg border border-green-200 bg-green-50 p-8 text-center">
               <p className="text-green-700">
-                ✓ Great! No subject is below 75% attendance in <strong>{recoveryData.campus}</strong>.
+                ✓ Great! No subject is below 80% attendance in <strong>{recoveryData.campus}</strong>.
               </p>
             </div>
           )}
@@ -253,9 +253,9 @@ export default function Recovery() {
                       </span>
                     </div>
                     <div className="mt-4 flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Below 75%</span>
+                      <span className="text-sm text-gray-600">Below 80%</span>
                       <span className="text-lg font-bold text-red-600">
-                        {subject.studentsBelow75Count}
+                        {subject.studentsBelow80Count}
                       </span>
                     </div>
                   </button>

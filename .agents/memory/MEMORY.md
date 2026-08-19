@@ -1,1 +1,2 @@
+- [GitHub push via connector API](github-push-via-api.md) — no raw token from connector; push via Git Data API through proxyFetch; base64 binaries inside the impure fn, never via shell pipes.
 - [Seeding & RBAC scope quirks](seed-rbac-scope.md) — superadmin only via direct insert; empty subjects[] = campus-wide visibility; prod is seeded by one-time startup backfill (skip if any seed account exists).

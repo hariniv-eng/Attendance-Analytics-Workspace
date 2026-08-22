@@ -5,490 +5,601 @@
  * NIAT SPI Platform API
  * OpenAPI spec version: 0.1.0
  */
-import * as zod from "zod";
+import * as zod from 'zod';
+
 
 /**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
-  status: zod.string(),
-});
+  "status": zod.string()
+})
+
 
 /**
  * @summary Password login
  */
 export const LoginBody = zod.object({
-  email: zod.string(),
-  password: zod.string(),
-});
+  "email": zod.string(),
+  "password": zod.string()
+})
 
 export const LoginResponse = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  email: zod.string(),
-  role: zod.string(),
-  campuses: zod.array(zod.string()).optional(),
-  subjects: zod.array(zod.string()).optional(),
-  isActive: zod.boolean().optional(),
-  lastLoginAt: zod.string().nullish(),
-});
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.string(),
+  "campuses": zod.array(zod.string()).optional(),
+  "subjects": zod.array(zod.string()).optional(),
+  "isActive": zod.boolean().optional(),
+  "lastLoginAt": zod.string().nullish()
+})
+
 
 /**
  * @summary Logout
  */
-export const LogoutResponse = zod.unknown();
+export const LogoutResponse = zod.unknown()
+
 
 /**
  * @summary Get current session user
  */
 export const GetMeResponse = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  email: zod.string(),
-  role: zod.string(),
-  campuses: zod.array(zod.string()).optional(),
-  subjects: zod.array(zod.string()).optional(),
-  isActive: zod.boolean().optional(),
-  lastLoginAt: zod.string().nullish(),
-});
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.string(),
+  "campuses": zod.array(zod.string()).optional(),
+  "subjects": zod.array(zod.string()).optional(),
+  "isActive": zod.boolean().optional(),
+  "lastLoginAt": zod.string().nullish()
+})
+
 
 /**
  * @summary Search students
  */
 export const SearchStudentsQueryParams = zod.object({
-  q: zod.coerce.string(),
-  limit: zod.coerce.number().optional(),
-});
+  "q": zod.coerce.string(),
+  "limit": zod.coerce.number().optional()
+})
 
 export const SearchStudentsResponseItem = zod.object({
-  studentId: zod.string(),
-  studentName: zod.string(),
-  instituteName: zod.string().nullish(),
-  sectionName: zod.string().nullish(),
-  attendancePct: zod.number().nullish(),
-  presentCount: zod.number().optional(),
-  totalCount: zod.number().optional(),
-});
-export const SearchStudentsResponse = zod.array(SearchStudentsResponseItem);
+  "studentId": zod.string(),
+  "studentName": zod.string(),
+  "instituteName": zod.string().nullish(),
+  "sectionName": zod.string().nullish(),
+  "attendancePct": zod.number().nullish(),
+  "presentCount": zod.number().optional(),
+  "totalCount": zod.number().optional()
+})
+export const SearchStudentsResponse = zod.array(SearchStudentsResponseItem)
+
 
 /**
  * @summary Get student attendance overview
  */
 export const FetchStudentOverviewParams = zod.object({
-  studentId: zod.coerce.string(),
-});
+  "studentId": zod.coerce.string()
+})
 
 export const FetchStudentOverviewQueryParams = zod.object({
-  t: zod.coerce
-    .string()
-    .optional()
-    .describe("SPI share token for public access (used when no staff session)"),
-});
+  "t": zod.coerce.string().optional().describe('SPI share token for public access (used when no staff session)')
+})
 
 export const FetchStudentOverviewResponse = zod.object({
-  studentId: zod.string(),
-  studentName: zod.string(),
-  instituteName: zod.string().nullish(),
-  sectionName: zod.string().nullish(),
-  totalSessions: zod.number(),
-  presentCount: zod.number(),
-  absentCount: zod.number(),
-  attendancePct: zod.number(),
-  inRecovery: zod.boolean(),
-  coursesInRecovery: zod.number(),
-});
+  "studentId": zod.string(),
+  "studentName": zod.string(),
+  "instituteName": zod.string().nullish(),
+  "sectionName": zod.string().nullish(),
+  "totalSessions": zod.number(),
+  "presentCount": zod.number(),
+  "absentCount": zod.number(),
+  "attendancePct": zod.number(),
+  "inRecovery": zod.boolean(),
+  "coursesInRecovery": zod.number()
+})
+
 
 /**
  * @summary Get student subject-wise attendance
  */
 export const FetchStudentSubjectsParams = zod.object({
-  studentId: zod.coerce.string(),
-});
+  "studentId": zod.coerce.string()
+})
 
 export const FetchStudentSubjectsQueryParams = zod.object({
-  t: zod.coerce
-    .string()
-    .optional()
-    .describe("SPI share token for public access (used when no staff session)"),
-});
+  "t": zod.coerce.string().optional().describe('SPI share token for public access (used when no staff session)')
+})
 
 export const FetchStudentSubjectsResponseItem = zod.object({
-  subjectTitle: zod.string(),
-  present: zod.number(),
-  total: zod.number(),
-  pct: zod.number(),
-  meetsRequirement: zod.boolean(),
-});
-export const FetchStudentSubjectsResponse = zod.array(
-  FetchStudentSubjectsResponseItem,
-);
+  "subjectTitle": zod.string(),
+  "present": zod.number(),
+  "total": zod.number(),
+  "pct": zod.number(),
+  "meetsRequirement": zod.boolean()
+})
+export const FetchStudentSubjectsResponse = zod.array(FetchStudentSubjectsResponseItem)
+
 
 /**
  * @summary Get student recent sessions
  */
 export const FetchStudentRecentSessionsParams = zod.object({
-  studentId: zod.coerce.string(),
-});
+  "studentId": zod.coerce.string()
+})
 
 export const FetchStudentRecentSessionsQueryParams = zod.object({
-  t: zod.coerce
-    .string()
-    .optional()
-    .describe("SPI share token for public access (used when no staff session)"),
-});
+  "t": zod.coerce.string().optional().describe('SPI share token for public access (used when no staff session)')
+})
 
 export const FetchStudentRecentSessionsResponseItem = zod.object({
-  date: zod.string(),
-  sessionTitle: zod.string(),
-  subjectTitle: zod.string(),
-  attendanceStatus: zod.string(),
-  markingMethod: zod.string().nullish(),
-});
-export const FetchStudentRecentSessionsResponse = zod.array(
-  FetchStudentRecentSessionsResponseItem,
-);
+  "date": zod.string(),
+  "sessionTitle": zod.string(),
+  "subjectTitle": zod.string(),
+  "attendanceStatus": zod.string(),
+  "markingMethod": zod.string().nullish()
+})
+export const FetchStudentRecentSessionsResponse = zod.array(FetchStudentRecentSessionsResponseItem)
+
 
 /**
  * @summary Get student quiz data
  */
 export const FetchStudentQuizzesParams = zod.object({
-  studentId: zod.coerce.string(),
-});
+  "studentId": zod.coerce.string()
+})
 
 export const FetchStudentQuizzesQueryParams = zod.object({
-  t: zod.coerce
-    .string()
-    .optional()
-    .describe("SPI share token for public access (used when no staff session)"),
-});
+  "t": zod.coerce.string().optional().describe('SPI share token for public access (used when no staff session)')
+})
 
 export const FetchStudentQuizzesResponse = zod.object({
-  classroomQuizzes: zod.array(
-    zod.object({
-      subjectTitle: zod.string(),
-      title: zod.string(),
-      score: zod.number(),
-      maxScore: zod.number(),
-      percentage: zod.number(),
-      status: zod.string(),
-      date: zod.string().nullish(),
-    }),
-  ),
-  moduleQuizzes: zod.array(
-    zod.object({
-      subjectTitle: zod.string(),
-      title: zod.string(),
-      score: zod.number(),
-      maxScore: zod.number(),
-      percentage: zod.number(),
-      status: zod.string(),
-      date: zod.string().nullish(),
-    }),
-  ),
-  classroomSummary: zod.object({
-    attempted: zod.number(),
-    total: zod.number(),
-    avgPct: zod.number(),
-  }),
-  moduleSummary: zod.object({
-    attempted: zod.number(),
-    total: zod.number(),
-    avgPct: zod.number(),
-  }),
-});
+  "classroomQuizzes": zod.array(zod.object({
+  "subjectTitle": zod.string(),
+  "title": zod.string(),
+  "score": zod.number(),
+  "maxScore": zod.number(),
+  "percentage": zod.number(),
+  "status": zod.string(),
+  "date": zod.string().nullish()
+})),
+  "moduleQuizzes": zod.array(zod.object({
+  "subjectTitle": zod.string(),
+  "title": zod.string(),
+  "score": zod.number(),
+  "maxScore": zod.number(),
+  "percentage": zod.number(),
+  "status": zod.string(),
+  "date": zod.string().nullish()
+})),
+  "classroomSummary": zod.object({
+  "attempted": zod.number(),
+  "total": zod.number(),
+  "avgPct": zod.number()
+}),
+  "moduleSummary": zod.object({
+  "attempted": zod.number(),
+  "total": zod.number(),
+  "avgPct": zod.number()
+})
+})
+
 
 /**
  * @summary Get scoped dashboard summary
  */
 export const GetDashboardSummaryResponse = zod.object({
-  totalStudents: zod.number(),
-  totalCampuses: zod.number(),
-  avgAttendancePct: zod.number(),
-  subjectsBelow80: zod.number(),
-  subjectBreakdown: zod.array(
-    zod.object({
-      subjectTitle: zod.string(),
-      studentCount: zod.number(),
-      presentCount: zod.number(),
-      totalCount: zod.number(),
-      pct: zod.number(),
-    }),
-  ),
-  campusBreakdown: zod.array(
-    zod.object({
-      instituteName: zod.string(),
-      studentCount: zod.number(),
-      sectionCount: zod.number(),
-      subjectCount: zod.number(),
-      presentCount: zod.number(),
-      totalCount: zod.number(),
-      pct: zod.number(),
-    }),
-  ),
-  sectionBreakdown: zod.array(
-    zod.object({
-      instituteName: zod.string(),
-      sectionName: zod.string(),
-      studentCount: zod.number(),
-      presentCount: zod.number(),
-      totalCount: zod.number(),
-      pct: zod.number(),
-    }),
-  ),
-  needsAttention: zod.array(
-    zod.object({
-      studentId: zod.string(),
-      studentName: zod.string(),
-      instituteName: zod.string().nullish(),
-      sectionName: zod.string().nullish(),
-      attendancePct: zod.number().nullish(),
-      presentCount: zod.number().optional(),
-      totalCount: zod.number().optional(),
-    }),
-  ),
-  updatedAt: zod.string().optional(),
-});
+  "totalStudents": zod.number(),
+  "totalCampuses": zod.number(),
+  "avgAttendancePct": zod.number(),
+  "subjectsBelow80": zod.number(),
+  "subjectBreakdown": zod.array(zod.object({
+  "subjectTitle": zod.string(),
+  "studentCount": zod.number(),
+  "presentCount": zod.number(),
+  "totalCount": zod.number(),
+  "pct": zod.number()
+})),
+  "campusBreakdown": zod.array(zod.object({
+  "instituteName": zod.string(),
+  "studentCount": zod.number(),
+  "sectionCount": zod.number(),
+  "subjectCount": zod.number(),
+  "presentCount": zod.number(),
+  "totalCount": zod.number(),
+  "pct": zod.number()
+})),
+  "sectionBreakdown": zod.array(zod.object({
+  "instituteName": zod.string(),
+  "sectionName": zod.string(),
+  "studentCount": zod.number(),
+  "presentCount": zod.number(),
+  "totalCount": zod.number(),
+  "pct": zod.number()
+})),
+  "needsAttention": zod.array(zod.object({
+  "studentId": zod.string(),
+  "studentName": zod.string(),
+  "instituteName": zod.string().nullish(),
+  "sectionName": zod.string().nullish(),
+  "attendancePct": zod.number().nullish(),
+  "presentCount": zod.number().optional(),
+  "totalCount": zod.number().optional()
+})),
+  "updatedAt": zod.string().optional()
+})
+
+
+/**
+ * @summary Live campus and section filter options (role-scoped, from BigQuery)
+ */
+export const GetDashboardFiltersQueryParams = zod.object({
+  "campus": zod.coerce.string().optional().describe('When set, sections are limited to this campus')
+})
+
+export const GetDashboardFiltersResponse = zod.object({
+  "campuses": zod.array(zod.string()),
+  "sections": zod.array(zod.string()),
+  "updatedAt": zod.coerce.date()
+})
+
 
 /**
  * @summary Get scoped student list with SPI paths
  */
 export const GetDashboardStudentsQueryParams = zod.object({
-  search: zod.coerce.string().optional(),
-  limit: zod.coerce.number().optional(),
-});
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().optional(),
+  "campus": zod.coerce.string().optional(),
+  "section": zod.coerce.string().optional(),
+  "subject": zod.coerce.string().optional().describe('Filter by subject title (subject-wise attendance)'),
+  "attendanceBand": zod.coerce.string().optional().describe('all | below50 | below80 | above80')
+})
 
 export const GetDashboardStudentsResponseItem = zod.object({
-  studentId: zod.string(),
-  studentName: zod.string(),
-  instituteName: zod.string(),
-  sectionName: zod.string().nullable(),
-  presentCount: zod.number(),
-  totalCount: zod.number(),
-  attendancePct: zod.number(),
-  classroomAvg: zod.number().nullish(),
-  moduleAvg: zod.number().nullish(),
-  spiPath: zod.string(),
-});
-export const GetDashboardStudentsResponse = zod.array(
-  GetDashboardStudentsResponseItem,
-);
+  "studentId": zod.string(),
+  "studentName": zod.string(),
+  "instituteName": zod.string(),
+  "sectionName": zod.string().nullable(),
+  "presentCount": zod.number(),
+  "totalCount": zod.number(),
+  "attendancePct": zod.number(),
+  "classroomAvg": zod.number().nullish(),
+  "moduleAvg": zod.number().nullish(),
+  "spiPath": zod.string()
+})
+export const GetDashboardStudentsResponse = zod.array(GetDashboardStudentsResponseItem)
+
 
 /**
  * @summary List all users
  */
 export const ListUsersResponseItem = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  email: zod.string(),
-  role: zod.string(),
-  campuses: zod.array(zod.string()),
-  subjects: zod.array(zod.string()),
-  isActive: zod.boolean(),
-  createdBy: zod.string().nullish(),
-  lastLoginAt: zod.string().nullish(),
-  createdAt: zod.string(),
-});
-export const ListUsersResponse = zod.array(ListUsersResponseItem);
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.string(),
+  "campuses": zod.array(zod.string()),
+  "subjects": zod.array(zod.string()),
+  "isActive": zod.boolean(),
+  "createdBy": zod.string().nullish(),
+  "lastLoginAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListUsersResponse = zod.array(ListUsersResponseItem)
+
 
 /**
  * @summary Create a user
  */
 export const CreateUserBody = zod.object({
-  name: zod.string(),
-  email: zod.string(),
-  role: zod.string(),
-  password: zod.string(),
-  campuses: zod.array(zod.string()).optional(),
-  subjects: zod.array(zod.string()).optional(),
-  isActive: zod.boolean().optional(),
-});
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.string(),
+  "password": zod.string(),
+  "campuses": zod.array(zod.string()).optional(),
+  "subjects": zod.array(zod.string()).optional(),
+  "isActive": zod.boolean().optional()
+})
 
 export const CreateUserResponse = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  email: zod.string(),
-  role: zod.string(),
-  campuses: zod.array(zod.string()),
-  subjects: zod.array(zod.string()),
-  isActive: zod.boolean(),
-  createdBy: zod.string().nullish(),
-  lastLoginAt: zod.string().nullish(),
-  createdAt: zod.string(),
-});
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.string(),
+  "campuses": zod.array(zod.string()),
+  "subjects": zod.array(zod.string()),
+  "isActive": zod.boolean(),
+  "createdBy": zod.string().nullish(),
+  "lastLoginAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
 
 /**
  * @summary Update a user
  */
 export const UpdateUserParams = zod.object({
-  id: zod.coerce.string(),
-});
+  "id": zod.coerce.string()
+})
 
 export const UpdateUserBody = zod.object({
-  name: zod.string().optional(),
-  email: zod.string().optional(),
-  role: zod.string().optional(),
-  password: zod.string().optional(),
-  campuses: zod.array(zod.string()).optional(),
-  subjects: zod.array(zod.string()).optional(),
-  isActive: zod.boolean().optional(),
-});
+  "name": zod.string().optional(),
+  "email": zod.string().optional(),
+  "role": zod.string().optional(),
+  "password": zod.string().optional(),
+  "campuses": zod.array(zod.string()).optional(),
+  "subjects": zod.array(zod.string()).optional(),
+  "isActive": zod.boolean().optional()
+})
 
 export const UpdateUserResponse = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  email: zod.string(),
-  role: zod.string(),
-  campuses: zod.array(zod.string()),
-  subjects: zod.array(zod.string()),
-  isActive: zod.boolean(),
-  createdBy: zod.string().nullish(),
-  lastLoginAt: zod.string().nullish(),
-  createdAt: zod.string(),
-});
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.string(),
+  "campuses": zod.array(zod.string()),
+  "subjects": zod.array(zod.string()),
+  "isActive": zod.boolean(),
+  "createdBy": zod.string().nullish(),
+  "lastLoginAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
 
 /**
  * @summary Delete a user
  */
 export const DeleteUserParams = zod.object({
-  id: zod.coerce.string(),
-});
+  "id": zod.coerce.string()
+})
 
-export const DeleteUserResponse = zod.void();
+export const DeleteUserResponse = zod.void()
+
 
 /**
  * @summary List campuses
  */
 export const ListCampusesResponseItem = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  instituteId: zod.string().nullish(),
-  createdAt: zod.string(),
-});
-export const ListCampusesResponse = zod.array(ListCampusesResponseItem);
+  "id": zod.string(),
+  "name": zod.string(),
+  "instituteId": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListCampusesResponse = zod.array(ListCampusesResponseItem)
+
 
 /**
  * @summary Create campus
  */
 export const CreateCampusBody = zod.object({
-  name: zod.string(),
-  instituteId: zod.string().optional(),
-});
+  "name": zod.string(),
+  "instituteId": zod.string().optional()
+})
 
 export const CreateCampusResponse = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  instituteId: zod.string().nullish(),
-  createdAt: zod.string(),
-});
+  "id": zod.string(),
+  "name": zod.string(),
+  "instituteId": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
 
 /**
  * @summary Update campus
  */
 export const UpdateCampusParams = zod.object({
-  id: zod.coerce.string(),
-});
+  "id": zod.coerce.string()
+})
 
 export const UpdateCampusBody = zod.object({
-  name: zod.string().optional(),
-  instituteId: zod.string().optional(),
-});
+  "name": zod.string().optional(),
+  "instituteId": zod.string().optional()
+})
 
 export const UpdateCampusResponse = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  instituteId: zod.string().nullish(),
-  createdAt: zod.string(),
-});
+  "id": zod.string(),
+  "name": zod.string(),
+  "instituteId": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
 
 /**
  * @summary Delete campus
  */
 export const DeleteCampusParams = zod.object({
-  id: zod.coerce.string(),
-});
+  "id": zod.coerce.string()
+})
 
-export const DeleteCampusResponse = zod.void();
+export const DeleteCampusResponse = zod.void()
+
 
 /**
  * @summary Get roles, campuses, subjects for forms
  */
 export const GetAdminMetaResponse = zod.object({
-  roles: zod.array(
-    zod.object({
-      value: zod.string(),
-      label: zod.string(),
-      description: zod.string(),
-    }),
-  ),
-  campuses: zod.array(zod.string()),
-  subjects: zod.array(zod.string()),
-});
+  "roles": zod.array(zod.object({
+  "value": zod.string(),
+  "label": zod.string(),
+  "description": zod.string()
+})),
+  "campuses": zod.array(zod.string()),
+  "subjects": zod.array(zod.string())
+})
+
+
+/**
+ * @summary List historical recovery instructor names and instructor accounts
+ */
+export const ListRecoveryInstructorLinksResponse = zod.object({
+  "instructors": zod.array(zod.object({
+  "instructorName": zod.string(),
+  "count": zod.number(),
+  "instructorId": zod.string().nullable()
+})),
+  "users": zod.array(zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "role": zod.string(),
+  "isActive": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Confirm the account linked to a historical instructor name
+ */
+export const UpdateRecoveryInstructorLinkBody = zod.object({
+  "instructorName": zod.string(),
+  "userId": zod.string().nullable()
+})
+
+export const UpdateRecoveryInstructorLinkResponse = zod.object({
+  "instructorName": zod.string(),
+  "linkedCount": zod.number(),
+  "instructorId": zod.string().nullable()
+})
+
+
+/**
+ * @summary List the authenticated instructor's assigned recovery sessions
+ */
+export const ListInstructorRecoverySessionsQueryParams = zod.object({
+  "date": zod.date().optional()
+})
+
+export const ListInstructorRecoverySessionsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "campus": zod.string(),
+  "subject": zod.string(),
+  "section": zod.string().nullable(),
+  "scheduledDate": zod.coerce.date(),
+  "startTime": zod.string(),
+  "endTime": zod.string(),
+  "studentsExpected": zod.number().nullable(),
+  "topics": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "sequenceNo": zod.number(),
+  "title": zod.string(),
+  "order": zod.number()
+}))
+})
+export const ListInstructorRecoverySessionsResponse = zod.array(ListInstructorRecoverySessionsResponseItem)
+
+
+/**
+ * @summary List curriculum for the authenticated instructor's scoped subjects
+ */
+export const ListInstructorRecoveryCurriculumResponseItem = zod.object({
+  "campus": zod.string(),
+  "subject": zod.string(),
+  "topics": zod.array(zod.object({
+  "id": zod.string().uuid(),
+  "sequenceNo": zod.number(),
+  "weekNo": zod.number().nullable(),
+  "title": zod.string()
+}))
+})
+export const ListInstructorRecoveryCurriculumResponse = zod.array(ListInstructorRecoveryCurriculumResponseItem)
+
+
+/**
+ * @summary Submit the authenticated instructor's recovery session report
+ */
+export const ReportRecoverySessionParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const reportRecoverySessionBodyStudentsAttendedMin = 0;
+
+
+
+export const ReportRecoverySessionBody = zod.object({
+  "coveredTopicIds": zod.array(zod.string().uuid()),
+  "studentsAttended": zod.number().min(reportRecoverySessionBodyStudentsAttendedMin).optional()
+})
+
+export const ReportRecoverySessionResponse = zod.object({
+  "id": zod.string().uuid(),
+  "status": zod.enum(['conducted', 'partial', 'no_show']),
+  "reportedAt": zod.coerce.date()
+})
+
 
 /**
  * @summary List BigQuery datasets
  */
 export const ListDatasetsResponseItem = zod.object({
-  datasetId: zod.string(),
-});
-export const ListDatasetsResponse = zod.array(ListDatasetsResponseItem);
+  "datasetId": zod.string()
+})
+export const ListDatasetsResponse = zod.array(ListDatasetsResponseItem)
+
 
 /**
  * @summary List tables in a dataset
  */
 export const ListTablesQueryParams = zod.object({
-  dataset: zod.coerce.string(),
-});
+  "dataset": zod.coerce.string()
+})
 
 export const ListTablesResponseItem = zod.object({
-  tableId: zod.string(),
-  kind: zod.string(),
-});
-export const ListTablesResponse = zod.array(ListTablesResponseItem);
+  "tableId": zod.string(),
+  "kind": zod.string()
+})
+export const ListTablesResponse = zod.array(ListTablesResponseItem)
+
 
 /**
  * @summary Preview rows from a table
  */
 export const PreviewTableQueryParams = zod.object({
-  dataset: zod.coerce.string(),
-  table: zod.coerce.string(),
-  limit: zod.coerce.number().optional(),
-});
+  "dataset": zod.coerce.string(),
+  "table": zod.coerce.string(),
+  "limit": zod.coerce.number().optional()
+})
 
 export const PreviewTableResponse = zod.object({
-  columns: zod.array(zod.string()),
-  rows: zod.array(zod.object({}).passthrough()),
-});
+  "columns": zod.array(zod.string()),
+  "rows": zod.array(zod.object({
+
+}).passthrough())
+})
+
 
 /**
  * @summary Get own profile
  */
 export const GetProfileResponse = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  email: zod.string(),
-  role: zod.string(),
-  campuses: zod.array(zod.string()).optional(),
-  subjects: zod.array(zod.string()).optional(),
-  isActive: zod.boolean().optional(),
-  lastLoginAt: zod.string().nullish(),
-});
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.string(),
+  "campuses": zod.array(zod.string()).optional(),
+  "subjects": zod.array(zod.string()).optional(),
+  "isActive": zod.boolean().optional(),
+  "lastLoginAt": zod.string().nullish()
+})
+
 
 /**
  * @summary Update name or password
  */
 export const UpdateProfileBody = zod.object({
-  name: zod.string().optional(),
-  currentPassword: zod.string().optional(),
-  newPassword: zod.string().optional(),
-});
+  "name": zod.string().optional(),
+  "currentPassword": zod.string().optional(),
+  "newPassword": zod.string().optional()
+})
 
 export const UpdateProfileResponse = zod.object({
-  id: zod.string(),
-  name: zod.string(),
-  email: zod.string(),
-  role: zod.string(),
-  campuses: zod.array(zod.string()).optional(),
-  subjects: zod.array(zod.string()).optional(),
-  isActive: zod.boolean().optional(),
-  lastLoginAt: zod.string().nullish(),
-});
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string(),
+  "role": zod.string(),
+  "campuses": zod.array(zod.string()).optional(),
+  "subjects": zod.array(zod.string()).optional(),
+  "isActive": zod.boolean().optional(),
+  "lastLoginAt": zod.string().nullish()
+})

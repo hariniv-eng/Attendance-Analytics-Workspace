@@ -25,6 +25,8 @@ import CampusWiseStats from "@/pages/CampusWiseStats";
 import SubjectSessions from "@/pages/SubjectSessions";
 import Recovery from "@/pages/Recovery";
 import RecoverySubjectDetail from "@/pages/RecoverySubjectDetail";
+import InstructorRecovery from "@/pages/InstructorRecovery";
+import AdminRecoveryInstructors from "@/pages/AdminRecoveryInstructors";
 
 const queryClient = new QueryClient();
 
@@ -32,13 +34,22 @@ function Protected({
   children,
   adminOnly,
   superadminOnly,
+  instructorOnly,
+  allowInstructor,
 }: {
   children: ReactNode;
   adminOnly?: boolean;
   superadminOnly?: boolean;
+  instructorOnly?: boolean;
+  allowInstructor?: boolean;
 }) {
   return (
-    <ProtectedRoute adminOnly={adminOnly} superadminOnly={superadminOnly}>
+    <ProtectedRoute
+      adminOnly={adminOnly}
+      superadminOnly={superadminOnly}
+      instructorOnly={instructorOnly}
+      allowInstructor={allowInstructor}
+    >
       <DashboardLayout>{children}</DashboardLayout>
     </ProtectedRoute>
   );
@@ -99,8 +110,13 @@ function Router() {
         </Protected>
       </Route>
       <Route path="/dashboard/profile">
-        <Protected>
+        <Protected allowInstructor>
           <Profile />
+        </Protected>
+      </Route>
+      <Route path="/instructor">
+        <Protected instructorOnly>
+          <InstructorRecovery />
         </Protected>
       </Route>
       <Route path="/dashboard/requests">
@@ -123,6 +139,11 @@ function Router() {
       <Route path="/admin/campuses">
         <Protected adminOnly>
           <AdminCampuses />
+        </Protected>
+      </Route>
+      <Route path="/admin/recovery-instructors">
+        <Protected adminOnly>
+          <AdminRecoveryInstructors />
         </Protected>
       </Route>
 

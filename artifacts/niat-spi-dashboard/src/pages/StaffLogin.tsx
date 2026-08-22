@@ -23,7 +23,7 @@ export default function StaffLogin() {
   // Already signed in (e.g. cookie from a prior attempt) — go straight to dashboard.
   useEffect(() => {
     if (!authLoading && user) {
-      setLocation("/dashboard");
+      setLocation(user.role === "instructor" ? "/instructor" : "/dashboard");
     }
   }, [authLoading, user, setLocation]);
 
@@ -39,7 +39,7 @@ export default function StaffLogin() {
           // 401 lands after login it wipes the cache and forces a second sign-in.
           await queryClient.cancelQueries({ queryKey: getGetMeQueryKey() });
           queryClient.setQueryData(getGetMeQueryKey(), loggedInUser);
-          setLocation("/dashboard");
+          setLocation(loggedInUser.role === "instructor" ? "/instructor" : "/dashboard");
         },
       },
     );

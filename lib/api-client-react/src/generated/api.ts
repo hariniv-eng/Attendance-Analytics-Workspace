@@ -28,20 +28,28 @@ import type {
   Campus,
   CampusInput,
   CampusUpdate,
+  DashboardFilters,
   DashboardStudent,
   DashboardSummary,
-  DashboardFilters,
   FetchStudentOverviewParams,
   FetchStudentQuizzesParams,
   FetchStudentRecentSessionsParams,
   FetchStudentSubjectsParams,
-  GetDashboardStudentsParams,
   GetDashboardFiltersParams,
+  GetDashboardStudentsParams,
   HealthStatus,
+  InstructorRecoveryCurriculum,
+  InstructorRecoverySession,
+  ListInstructorRecoverySessionsParams,
   ListTablesParams,
   LoginInput,
   PreviewTableParams,
   ProfileUpdate,
+  RecoveryInstructorLinkData,
+  RecoveryInstructorLinkInput,
+  RecoveryInstructorLinkResult,
+  RecoverySessionReportInput,
+  RecoverySessionReportResult,
   SearchStudentsParams,
   SessionRecord,
   StudentOverview,
@@ -920,11 +928,16 @@ export const getDashboardFilters = async (params?: GetDashboardFiltersParams, op
   }
 );}
 
+
+
+
+
 export const getGetDashboardFiltersQueryKey = (params?: GetDashboardFiltersParams,) => {
     return [
     `/api/dashboard/filters`, ...(params ? [params] : [])
     ] as const;
     }
+
 
 export const getGetDashboardFiltersQueryOptions = <TData = Awaited<ReturnType<typeof getDashboardFilters>>, TError = ErrorType<unknown>>(params?: GetDashboardFiltersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardFilters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
@@ -933,7 +946,13 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 
   const queryKey =  queryOptions?.queryKey ?? getGetDashboardFiltersQueryKey(params);
 
+
+
     const queryFn: QueryFunction<Awaited<ReturnType<typeof getDashboardFilters>>> = ({ signal }) => getDashboardFilters(params, { signal, ...requestOptions });
+
+
+
+
 
    return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDashboardFilters>>, TError, TData> & { queryKey: QueryKey }
 }
@@ -941,19 +960,28 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 export type GetDashboardFiltersQueryResult = NonNullable<Awaited<ReturnType<typeof getDashboardFilters>>>
 export type GetDashboardFiltersQueryError = ErrorType<unknown>
 
+
 /**
  * @summary Live campus and section filter options (role-scoped, from BigQuery)
  */
+
 export function useGetDashboardFilters<TData = Awaited<ReturnType<typeof getDashboardFilters>>, TError = ErrorType<unknown>>(
  params?: GetDashboardFiltersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDashboardFilters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getGetDashboardFiltersQueryOptions(params, options)
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDashboardFiltersQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
   return withQueryKey(query, queryOptions.queryKey);
 }
+
+
+
+
+
+
 
 export const getGetDashboardStudentsUrl = (params?: GetDashboardStudentsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -1691,6 +1719,385 @@ export function useGetAdminMeta<TData = Awaited<ReturnType<typeof getAdminMeta>>
 
 
 
+
+export const getListRecoveryInstructorLinksUrl = () => {
+
+
+
+
+  return `/api/admin/recovery-instructor-links`
+}
+
+/**
+ * @summary List historical recovery instructor names and instructor accounts
+ */
+export const listRecoveryInstructorLinks = async ( options?: RequestInit): Promise<RecoveryInstructorLinkData> => {
+
+  return customFetch<RecoveryInstructorLinkData>(getListRecoveryInstructorLinksUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRecoveryInstructorLinksQueryKey = () => {
+    return [
+    `/api/admin/recovery-instructor-links`
+    ] as const;
+    }
+
+
+export const getListRecoveryInstructorLinksQueryOptions = <TData = Awaited<ReturnType<typeof listRecoveryInstructorLinks>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecoveryInstructorLinks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRecoveryInstructorLinksQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRecoveryInstructorLinks>>> = ({ signal }) => listRecoveryInstructorLinks({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRecoveryInstructorLinks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRecoveryInstructorLinksQueryResult = NonNullable<Awaited<ReturnType<typeof listRecoveryInstructorLinks>>>
+export type ListRecoveryInstructorLinksQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List historical recovery instructor names and instructor accounts
+ */
+
+export function useListRecoveryInstructorLinks<TData = Awaited<ReturnType<typeof listRecoveryInstructorLinks>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecoveryInstructorLinks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRecoveryInstructorLinksQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateRecoveryInstructorLinkUrl = () => {
+
+
+
+
+  return `/api/admin/recovery-instructor-links`
+}
+
+/**
+ * @summary Confirm the account linked to a historical instructor name
+ */
+export const updateRecoveryInstructorLink = async (recoveryInstructorLinkInput: RecoveryInstructorLinkInput, options?: RequestInit): Promise<RecoveryInstructorLinkResult> => {
+
+  return customFetch<RecoveryInstructorLinkResult>(getUpdateRecoveryInstructorLinkUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recoveryInstructorLinkInput)
+  }
+);}
+
+
+
+
+export const getUpdateRecoveryInstructorLinkMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRecoveryInstructorLink>>, TError,{data: BodyType<RecoveryInstructorLinkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateRecoveryInstructorLink>>, TError,{data: BodyType<RecoveryInstructorLinkInput>}, TContext> => {
+
+const mutationKey = ['updateRecoveryInstructorLink'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateRecoveryInstructorLink>>, {data: BodyType<RecoveryInstructorLinkInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateRecoveryInstructorLink(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateRecoveryInstructorLinkMutationResult = NonNullable<Awaited<ReturnType<typeof updateRecoveryInstructorLink>>>
+    export type UpdateRecoveryInstructorLinkMutationBody = BodyType<RecoveryInstructorLinkInput>
+    export type UpdateRecoveryInstructorLinkMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Confirm the account linked to a historical instructor name
+ */
+export const useUpdateRecoveryInstructorLink = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRecoveryInstructorLink>>, TError,{data: BodyType<RecoveryInstructorLinkInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateRecoveryInstructorLink>>,
+        TError,
+        {data: BodyType<RecoveryInstructorLinkInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateRecoveryInstructorLinkMutationOptions(options));
+    }
+
+export const getListInstructorRecoverySessionsUrl = (params?: ListInstructorRecoverySessionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/recovery/instructor/sessions?${stringifiedParams}` : `/api/recovery/instructor/sessions`
+}
+
+/**
+ * @summary List the authenticated instructor's assigned recovery sessions
+ */
+export const listInstructorRecoverySessions = async (params?: ListInstructorRecoverySessionsParams, options?: RequestInit): Promise<InstructorRecoverySession[]> => {
+
+  return customFetch<InstructorRecoverySession[]>(getListInstructorRecoverySessionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInstructorRecoverySessionsQueryKey = (params?: ListInstructorRecoverySessionsParams,) => {
+    return [
+    `/api/recovery/instructor/sessions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListInstructorRecoverySessionsQueryOptions = <TData = Awaited<ReturnType<typeof listInstructorRecoverySessions>>, TError = ErrorType<void>>(params?: ListInstructorRecoverySessionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInstructorRecoverySessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInstructorRecoverySessionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInstructorRecoverySessions>>> = ({ signal }) => listInstructorRecoverySessions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInstructorRecoverySessions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInstructorRecoverySessionsQueryResult = NonNullable<Awaited<ReturnType<typeof listInstructorRecoverySessions>>>
+export type ListInstructorRecoverySessionsQueryError = ErrorType<void>
+
+
+/**
+ * @summary List the authenticated instructor's assigned recovery sessions
+ */
+
+export function useListInstructorRecoverySessions<TData = Awaited<ReturnType<typeof listInstructorRecoverySessions>>, TError = ErrorType<void>>(
+ params?: ListInstructorRecoverySessionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInstructorRecoverySessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInstructorRecoverySessionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListInstructorRecoveryCurriculumUrl = () => {
+
+
+
+
+  return `/api/recovery/instructor/curriculum`
+}
+
+/**
+ * @summary List curriculum for the authenticated instructor's scoped subjects
+ */
+export const listInstructorRecoveryCurriculum = async ( options?: RequestInit): Promise<InstructorRecoveryCurriculum[]> => {
+
+  return customFetch<InstructorRecoveryCurriculum[]>(getListInstructorRecoveryCurriculumUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListInstructorRecoveryCurriculumQueryKey = () => {
+    return [
+    `/api/recovery/instructor/curriculum`
+    ] as const;
+    }
+
+
+export const getListInstructorRecoveryCurriculumQueryOptions = <TData = Awaited<ReturnType<typeof listInstructorRecoveryCurriculum>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInstructorRecoveryCurriculum>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInstructorRecoveryCurriculumQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInstructorRecoveryCurriculum>>> = ({ signal }) => listInstructorRecoveryCurriculum({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInstructorRecoveryCurriculum>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListInstructorRecoveryCurriculumQueryResult = NonNullable<Awaited<ReturnType<typeof listInstructorRecoveryCurriculum>>>
+export type ListInstructorRecoveryCurriculumQueryError = ErrorType<void>
+
+
+/**
+ * @summary List curriculum for the authenticated instructor's scoped subjects
+ */
+
+export function useListInstructorRecoveryCurriculum<TData = Awaited<ReturnType<typeof listInstructorRecoveryCurriculum>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listInstructorRecoveryCurriculum>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListInstructorRecoveryCurriculumQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReportRecoverySessionUrl = (id: string,) => {
+
+
+
+
+  return `/api/recovery/sessions/${id}/report`
+}
+
+/**
+ * @summary Submit the authenticated instructor's recovery session report
+ */
+export const reportRecoverySession = async (id: string,
+    recoverySessionReportInput: RecoverySessionReportInput, options?: RequestInit): Promise<RecoverySessionReportResult> => {
+
+  return customFetch<RecoverySessionReportResult>(getReportRecoverySessionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recoverySessionReportInput)
+  }
+);}
+
+
+
+
+export const getReportRecoverySessionMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reportRecoverySession>>, TError,{id: string;data: BodyType<RecoverySessionReportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reportRecoverySession>>, TError,{id: string;data: BodyType<RecoverySessionReportInput>}, TContext> => {
+
+const mutationKey = ['reportRecoverySession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reportRecoverySession>>, {id: string;data: BodyType<RecoverySessionReportInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  reportRecoverySession(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReportRecoverySessionMutationResult = NonNullable<Awaited<ReturnType<typeof reportRecoverySession>>>
+    export type ReportRecoverySessionMutationBody = BodyType<RecoverySessionReportInput>
+    export type ReportRecoverySessionMutationError = ErrorType<void>
+
+    /**
+ * @summary Submit the authenticated instructor's recovery session report
+ */
+export const useReportRecoverySession = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reportRecoverySession>>, TError,{id: string;data: BodyType<RecoverySessionReportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reportRecoverySession>>,
+        TError,
+        {id: string;data: BodyType<RecoverySessionReportInput>},
+        TContext
+      > => {
+      return useMutation(getReportRecoverySessionMutationOptions(options));
+    }
 
 export const getListDatasetsUrl = () => {
 

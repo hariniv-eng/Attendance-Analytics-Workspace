@@ -9,6 +9,8 @@ export type Role =
 export interface SessionScope {
   campuses?: string[];
   subjects?: string[];
+  /** Present only for instructors: recovery sessions must be theirs. */
+  instructorId?: string;
 }
 
 export const REQUIRED_PCT = 80;
@@ -55,6 +57,7 @@ export function manageableRoles(role: Role): Role[] {
 }
 
 export function scopeForSession(session: {
+  sub?: string;
   role: Role;
   campuses: string[];
   subjects: string[];
@@ -72,11 +75,20 @@ export function scopeForSession(session: {
     }
     return { campuses: session.campuses };
   }
-  if (session.role === "capability_manager" || session.role === "instructor") {
+  if (session.role === "capability_manager") {
     return {
       campuses:
         session.campuses.length > 0 ? session.campuses : ["__none__"],
       subjects: session.subjects,
+    };
+  }
+  if (session.role === "instructor") {
+    return {
+      campuses:
+        session.campuses.length > 0 ? session.campuses : ["__none__"],
+      subjects:
+        session.subjects.length > 0 ? session.subjects : ["__none__"],
+      instructorId: session.sub,
     };
   }
   return { campuses: ["__none__"] };

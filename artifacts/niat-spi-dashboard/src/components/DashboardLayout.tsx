@@ -18,6 +18,8 @@ import {
   ChevronDown,
   BarChart3,
   AlertTriangle,
+  ClipboardCheck,
+  Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { roleLabel } from "@/lib/roleLabels";
@@ -42,6 +44,7 @@ const mainNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { label: "User Access", href: "/admin/users", icon: Shield },
   { label: "Campus Setup", href: "/admin/campuses", icon: Building },
+  { label: "Recovery instructors", href: "/admin/recovery-instructors", icon: Link2 },
 ];
 
 function NavItemLink({
@@ -168,6 +171,10 @@ function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
   const visibleMainNav = mainNav.filter(
     (item) => !(user?.role === "boa" && item.href === "/dashboard/campuses"),
   );
+  const instructorNav: NavItem[] = [
+    { label: "Report recovery", href: "/instructor", icon: ClipboardCheck },
+  ];
+  const renderedMainNav = user?.role === "instructor" ? instructorNav : visibleMainNav;
 
   return (
     <div className="flex h-full flex-col bg-slate-900">
@@ -179,7 +186,7 @@ function SidebarInner({ onNavigate }: { onNavigate?: () => void }) {
         <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
           Main
         </p>
-        {visibleMainNav.map((item) => (
+        {renderedMainNav.map((item) => (
           <NavItemLink
             key={item.href}
             item={item}

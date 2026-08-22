@@ -18,6 +18,8 @@ tags:
     description: Dashboard summaries
   - name: admin
     description: Admin user/campus management
+  - name: recovery
+    description: Instructor recovery session reporting
   - name: bigquery
     description: BigQuery Explorer (superadmin)
   - name: profile
@@ -440,6 +442,107 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminMeta"
+
+  /admin/recovery-instructor-links:
+    get:
+      operationId: listRecoveryInstructorLinks
+      tags: [admin]
+      summary: List historical recovery instructor names and instructor accounts
+      responses:
+        "200":
+          description: Recovery instructor links
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoveryInstructorLinkData"
+    put:
+      operationId: updateRecoveryInstructorLink
+      tags: [admin]
+      summary: Confirm the account linked to a historical instructor name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecoveryInstructorLinkInput"
+      responses:
+        "200":
+          description: Updated instructor link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoveryInstructorLinkResult"
+
+  /recovery/instructor/sessions:
+    get:
+      operationId: listInstructorRecoverySessions
+      tags: [recovery]
+      summary: List the authenticated instructor's assigned recovery sessions
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Assigned recovery sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InstructorRecoverySession"
+        "403":
+          description: Instructor access required
+
+  /recovery/instructor/curriculum:
+    get:
+      operationId: listInstructorRecoveryCurriculum
+      tags: [recovery]
+      summary: List curriculum for the authenticated instructor's scoped subjects
+      responses:
+        "200":
+          description: Scoped recovery curriculum
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InstructorRecoveryCurriculum"
+        "403":
+          description: Instructor access required
+
+  /recovery/sessions/{id}/report:
+    post:
+      operationId: reportRecoverySession
+      tags: [recovery]
+      summary: Submit the authenticated instructor's recovery session report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecoverySessionReportInput"
+      responses:
+        "200":
+          description: Submitted recovery report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoverySessionReportResult"
+        "403":
+          description: Session is not assigned to the caller
+        "409":
+          description: Session is no longer reportable
 
   /bigquery/datasets:
     get:
@@ -918,6 +1021,159 @@ components:
           type: string
         instituteId:
           type: string
+
+    InstructorRecoveryTopic:
+      type: object
+      required: [id, sequenceNo, title, order]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sequenceNo:
+          type: integer
+        title:
+          type: string
+        order:
+          type: integer
+
+    InstructorRecoverySession:
+      type: object
+      required: [id, campus, subject, section, scheduledDate, startTime, endTime, studentsExpected, topics]
+      properties:
+        id:
+          type: string
+          format: uuid
+        campus:
+          type: string
+        subject:
+          type: string
+        section:
+          type: ["string", "null"]
+        scheduledDate:
+          type: string
+          format: date
+        startTime:
+          type: string
+        endTime:
+          type: string
+        studentsExpected:
+          type: ["integer", "null"]
+        topics:
+          type: array
+          items:
+            $ref: "#/components/schemas/InstructorRecoveryTopic"
+
+    InstructorRecoveryCurriculumTopic:
+      type: object
+      required: [id, sequenceNo, weekNo, title]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sequenceNo:
+          type: integer
+        weekNo:
+          type: ["integer", "null"]
+        title:
+          type: string
+
+    InstructorRecoveryCurriculum:
+      type: object
+      required: [campus, subject, topics]
+      properties:
+        campus:
+          type: string
+        subject:
+          type: string
+        topics:
+          type: array
+          items:
+            $ref: "#/components/schemas/InstructorRecoveryCurriculumTopic"
+
+    RecoverySessionReportInput:
+      type: object
+      required: [coveredTopicIds]
+      properties:
+        coveredTopicIds:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        studentsAttended:
+          type: integer
+          minimum: 0
+
+    RecoverySessionReportResult:
+      type: object
+      required: [id, status, reportedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [conducted, partial, no_show]
+        reportedAt:
+          type: string
+          format: date-time
+
+    RecoveryInstructorLink:
+      type: object
+      required: [instructorName, count, instructorId]
+      properties:
+        instructorName:
+          type: string
+        count:
+          type: integer
+        instructorId:
+          type: ["string", "null"]
+
+    RecoveryInstructorUser:
+      type: object
+      required: [id, name, role, isActive]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        isActive:
+          type: boolean
+
+    RecoveryInstructorLinkData:
+      type: object
+      required: [instructors, users]
+      properties:
+        instructors:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecoveryInstructorLink"
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecoveryInstructorUser"
+
+    RecoveryInstructorLinkInput:
+      type: object
+      required: [instructorName, userId]
+      properties:
+        instructorName:
+          type: string
+        userId:
+          type: ["string", "null"]
+
+    RecoveryInstructorLinkResult:
+      type: object
+      required: [instructorName, linkedCount, instructorId]
+      properties:
+        instructorName:
+          type: string
+        linkedCount:
+          type: integer
+        instructorId:
+          type: ["string", "null"]
 
     CampusUpdate:
       type: object

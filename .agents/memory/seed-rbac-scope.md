@@ -11,13 +11,15 @@ account must be created by a direct DB insert (e.g. the seed script), not via
 **How to apply:** when bootstrapping/seeding, insert superadmin rows directly with a
 bcrypt hash; do not route them through admin endpoints.
 
-# Empty scope arrays mean "no filter", not "no access"
-In `scopeForSession`/`scopeClause`, a subject or campus filter is only applied when
-the array length > 0. A user seeded with `subjects: []` is therefore campus-scoped
-only and sees ALL subjects within their assigned campus — not zero rows.
-**Why:** lets roles be scoped by campus alone when subject data isn't provided.
-**How to apply:** to restrict a user to specific subjects you must populate the
-`subjects` array; leaving it empty grants full-subject visibility within campus scope.
+# Empty scope arrays usually mean "no filter"; instructors are the exception
+For non-instructor scoped roles, a subject or campus filter is only applied when
+the array length is greater than zero. Instructors instead deny by default when
+either assigned campus or subject scope is empty.
+**Why:** campus-only visibility remains useful for operational roles, but an
+unscoped instructor must never inherit campus-wide recovery access.
+**How to apply:** always populate both campus and subject arrays for instructors.
+For other scoped roles, check the route's scope semantics before treating an empty
+array as no access.
 
 # Production seeding happens via one-time startup backfill
 The agent cannot write to the production DB (read-only replica), so staff-account

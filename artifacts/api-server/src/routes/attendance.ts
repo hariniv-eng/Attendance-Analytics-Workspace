@@ -517,6 +517,10 @@ router.post(
 // Recovery dashboard - subject-wise attendance below 80% by campus
 router.get("/recovery/subjects", requireSession(), async (req, res): Promise<void> => {
   const session = req.session!;
+  if (session.role === "instructor") {
+    res.status(403).json({ error: "Instructors can only view their assigned recovery sessions" });
+    return;
+  }
   const scope = scopeForSession({
     role: session.role as Role,
     campuses: session.campuses,

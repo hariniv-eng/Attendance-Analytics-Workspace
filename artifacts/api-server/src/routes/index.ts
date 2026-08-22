@@ -7,6 +7,7 @@ import adminRouter from "./admin.js";
 import bigqueryRouter from "./bigquery.js";
 import profileRouter from "./profile.js";
 import notificationsRouter from "./notifications.js";
+import recoveryRouter from "./recovery.js";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use("/admin", adminRouter);
 router.use("/bigquery", bigqueryRouter);
 router.use("/profile", profileRouter);
 router.use("/notifications", notificationsRouter);
+router.use("/recovery", recoveryRouter);
 
 export default router;

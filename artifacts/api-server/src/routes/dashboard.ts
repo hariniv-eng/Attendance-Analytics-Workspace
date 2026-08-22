@@ -22,6 +22,17 @@ import { BIGQUERY_TO_CURRICULUM_SUBJECT } from "../seed/cdu-curriculum.js";
 
 const router = Router();
 
+router.use(requireSession());
+router.use((req, res, next) => {
+  if (req.session?.role === "instructor") {
+    res.status(403).json({
+      error: "Instructors can only view their assigned recovery sessions",
+    });
+    return;
+  }
+  next();
+});
+
 router.get("/summary", requireSession(), async (req, res): Promise<void> => {
   const session = req.session!;
   const scope = scopeForSession({
@@ -162,6 +173,10 @@ router.get(
   requireSession(),
   async (req, res): Promise<void> => {
     const session = req.session!;
+    if (session.role === "instructor") {
+      res.status(403).json({ error: "Instructors can only view their assigned recovery sessions" });
+      return;
+    }
     const scope = scopeForSession({
       role: session.role as Role,
       campuses: session.campuses,
@@ -233,6 +248,10 @@ router.get(
   requireSession(),
   async (req, res): Promise<void> => {
     const session = req.session!;
+    if (session.role === "instructor") {
+      res.status(403).json({ error: "Instructors can only view their assigned recovery sessions" });
+      return;
+    }
     const scope = scopeForSession({
       role: session.role as Role,
       campuses: session.campuses,
@@ -316,6 +335,10 @@ router.get(
   requireSession(),
   async (req, res): Promise<void> => {
     const session = req.session!;
+    if (session.role === "instructor") {
+      res.status(403).json({ error: "Instructors can only view their assigned recovery sessions" });
+      return;
+    }
     const scope = scopeForSession({
       role: session.role as Role,
       campuses: session.campuses,

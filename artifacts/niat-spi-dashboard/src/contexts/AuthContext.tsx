@@ -49,10 +49,14 @@ export function ProtectedRoute({
   children,
   adminOnly = false,
   superadminOnly = false,
+  instructorOnly = false,
+  allowInstructor = false,
 }: {
   children: ReactNode;
   adminOnly?: boolean;
   superadminOnly?: boolean;
+  instructorOnly?: boolean;
+  allowInstructor?: boolean;
 }) {
   const queryClient = useQueryClient();
   const { user, isLoading, isError } = useAuth();
@@ -66,7 +70,9 @@ export function ProtectedRoute({
 
   const lacksAccess = (role: string) =>
     (adminOnly && !["admin", "superadmin"].includes(role)) ||
-    (superadminOnly && role !== "superadmin");
+    (superadminOnly && role !== "superadmin") ||
+    (instructorOnly && role !== "instructor") ||
+    (role === "instructor" && !instructorOnly && !allowInstructor);
 
   React.useEffect(() => {
     if (isLoading) return;
@@ -74,10 +80,10 @@ export function ProtectedRoute({
     if (!sessionUser) {
       setLocation("/staff-login");
     } else if (lacksAccess(sessionUser.role)) {
-      setLocation("/dashboard");
+      setLocation(sessionUser.role === "instructor" ? "/instructor" : "/dashboard");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionUser, isLoading, isError, setLocation, adminOnly, superadminOnly]);
+  }, [sessionUser, isLoading, isError, setLocation, adminOnly, superadminOnly, instructorOnly, allowInstructor]);
 
   if (isLoading && !sessionUser) {
     return (

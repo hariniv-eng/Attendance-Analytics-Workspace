@@ -13,18 +13,16 @@ import { manageableRoles, ROLE_META, SUBJECTS } from "../lib/rbac.js";
 import type { Role } from "../lib/rbac.js";
 import { getInstitutions, getSubjectList } from "../lib/queries.js";
 import { cacheDeletePrefix } from "../lib/cache.js";
+import { usersTable, campusesTable, recoverySessionsTable } from "@workspace/db";
+import { UpdateRecoveryInstructorLinkBody } from "@workspace/api-zod";
 
 const router = Router();
 
-// All admin routes require manage permission
-router.use(requireSession({ manage: true }));
-router.use((_req, res, next) => {
-  res.set("Cache-Control", "no-store");
-  next();
-});
-
-// Users
-router.get("/users", async (req, res): Promise<void> => {
+  const [sessions, users] = await Promise.all([
+    db.select().from(recoverySessionsTable).orderBy(recoverySessionsTable.instructorName),
+    db.select({ id: usersTable.id, name: usersTable.name, role: usersTable.role, isActive: usersTable.isActive })
+      .from(usersTable).where(eq(usersTable.isActive, true)).orderBy(usersTable.name),
+  ]);
   const users = await db
     .select()
     .from(usersTable)
@@ -61,7 +59,7 @@ router.post("/users", async (req, res): Promise<void> => {
     res.status(400).json({ error: "name, email, role, password required" });
     return;
   }
-  const allowedRoles = manageableRoles(session.role as Role);
+    const allowedRoles = manageableRoles(session.role as Role);
   if (!allowedRoles.includes(role as Role)) {
     res.status(403).json({ error: "Cannot assign this role" });
     return;
@@ -69,20 +67,12 @@ router.post("/users", async (req, res): Promise<void> => {
   const normalizedEmail = email.trim().toLowerCase();
   const passwordHash = await bcrypt.hash(password, 10);
   const inserted = await db
-    .insert(usersTable)
-    .values({
-      name,
-      email: normalizedEmail,
-      passwordHash,
-      role: role as Role,
-      campuses: campuses ?? [],
-      subjects: subjects ?? [],
-      isActive: isActive ?? true,
-      createdBy: session.email,
-    })
+    .insert(campusesTable)
+    .values({ name, instituteId })
     .returning();
-  const u = inserted[0]!;
-  res.status(201).json({
+  const u = updated[0]!;
+  invalidateSessionCache(u.id);
+  res.json({
     id: u.id,
     name: u.name,
     email: u.email,
@@ -91,14 +81,14 @@ router.post("/users", async (req, res): Promise<void> => {
     subjects: u.subjects,
     isActive: u.isActive,
     createdBy: u.createdBy,
-    lastLoginAt: null,
+    lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
     createdAt: u.createdAt.toISOString(),
   });
 });
 
-router.patch("/users/:id", async (req, res): Promise<void> => {
+router.delete("/users/:id", async (req, res): Promise<void> => {
   const session = req.session!;
-  const id = String(req.params["id"] ?? "");
+    const id = String(req.params["id"] ?? "");
   const existing = await db
     .select()
     .from(usersTable)
@@ -126,7 +116,9 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
       subjects?: string[];
       isActive?: boolean;
     };
-  const updates: Partial<typeof usersTable.$inferInsert> = {};
+  const updates: Partial<typeof campusesTable.$inferInsert> = {
+    updatedAt: new Date(),
+  };
   if (name) updates.name = name;
   if (email) updates.email = email.trim().toLowerCase();
   if (role) {
@@ -150,9 +142,9 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
   }
   updates.updatedAt = new Date();
   const updated = await db
-    .update(usersTable)
+    .update(campusesTable)
     .set(updates)
-    .where(eq(usersTable.id, id))
+    .where(eq(campusesTable.id, id))
     .returning();
   const u = updated[0]!;
   invalidateSessionCache(u.id);
@@ -172,7 +164,7 @@ router.patch("/users/:id", async (req, res): Promise<void> => {
 
 router.delete("/users/:id", async (req, res): Promise<void> => {
   const session = req.session!;
-  const id = String(req.params["id"] ?? "");
+    const id = String(req.params["id"] ?? "");
   if (id === session.sub) {
     res.status(400).json({ error: "Cannot delete yourself" });
     return;
@@ -227,19 +219,21 @@ router.post("/campuses", async (req, res): Promise<void> => {
     .insert(campusesTable)
     .values({ name, instituteId })
     .returning();
-  const c = inserted[0]!;
-  res
-    .status(201)
-    .json({
-      id: c.id,
-      name: c.name,
-      instituteId: c.instituteId,
-      createdAt: c.createdAt.toISOString(),
-    });
+  const c = updated[0];
+  if (!c) {
+    res.status(404).json({ error: "Campus not found" });
+    return;
+  }
+  res.json({
+    id: c.id,
+    name: c.name,
+    instituteId: c.instituteId,
+    createdAt: c.createdAt.toISOString(),
+  });
 });
 
-router.patch("/campuses/:id", async (req, res): Promise<void> => {
-  const id = String(req.params["id"] ?? "");
+router.delete("/campuses/:id", async (req, res): Promise<void> => {
+    const id = String(req.params["id"] ?? "");
   const { name, instituteId } = req.body as {
     name?: string;
     instituteId?: string;
@@ -268,7 +262,7 @@ router.patch("/campuses/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/campuses/:id", async (req, res): Promise<void> => {
-  const id = String(req.params["id"] ?? "");
+    const id = String(req.params["id"] ?? "");
   await db.delete(campusesTable).where(eq(campusesTable.id, id));
   res.status(204).send();
 });
@@ -368,3 +362,14 @@ router.get("/meta", async (req, res) => {
 });
 
 export default router;
+
+  const groups = new Map<string, { count: number; instructorId: string | null }>();
+
+    const user = await db.select({ id: usersTable.id, role: usersTable.role, isActive: usersTable.isActive })
+      .from(usersTable).where(eq(usersTable.id, body.userId)).limit(1);
+
+  const parsed = UpdateRecoveryInstructorLinkBody.safeParse(req.body);
+
+  const body = parsed.data;
+
+    const current = groups.get(item.instructorName) ?? { count: 0, instructorId: item.instructorId };

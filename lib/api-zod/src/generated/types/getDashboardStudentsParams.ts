@@ -9,4 +9,14 @@
 export type GetDashboardStudentsParams = {
 search?: string;
 limit?: number;
+campus?: string;
+section?: string;
+/**
+ * Filter by subject title (subject-wise attendance)
+ */
+subject?: string;
+/**
+ * all | below50 | below80 | above80
+ */
+attendanceBand?: string;
 };

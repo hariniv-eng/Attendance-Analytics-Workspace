@@ -122,6 +122,12 @@ export interface SectionSummaryItem {
   pct: number;
 }
 
+export interface DashboardFilters {
+  campuses: string[];
+  sections: string[];
+  updatedAt: string;
+}
+
 export interface DashboardSummary {
   totalStudents: number;
   totalCampuses: number;
@@ -198,6 +204,94 @@ export interface CampusInput {
   instituteId?: string;
 }
 
+export interface InstructorRecoveryTopic {
+  id: string;
+  sequenceNo: number;
+  title: string;
+  order: number;
+}
+
+export interface InstructorRecoverySession {
+  id: string;
+  campus: string;
+  subject: string;
+  /** @nullable */
+  section: string | null;
+  scheduledDate: string;
+  startTime: string;
+  endTime: string;
+  /** @nullable */
+  studentsExpected: number | null;
+  topics: InstructorRecoveryTopic[];
+}
+
+export interface InstructorRecoveryCurriculumTopic {
+  id: string;
+  sequenceNo: number;
+  /** @nullable */
+  weekNo: number | null;
+  title: string;
+}
+
+export interface InstructorRecoveryCurriculum {
+  campus: string;
+  subject: string;
+  topics: InstructorRecoveryCurriculumTopic[];
+}
+
+export interface RecoverySessionReportInput {
+  coveredTopicIds: string[];
+  /** @minimum 0 */
+  studentsAttended?: number;
+}
+
+export type RecoverySessionReportResultStatus = typeof RecoverySessionReportResultStatus[keyof typeof RecoverySessionReportResultStatus];
+
+
+export const RecoverySessionReportResultStatus = {
+  conducted: 'conducted',
+  partial: 'partial',
+  no_show: 'no_show',
+} as const;
+
+export interface RecoverySessionReportResult {
+  id: string;
+  status: RecoverySessionReportResultStatus;
+  reportedAt: string;
+}
+
+export interface RecoveryInstructorLink {
+  instructorName: string;
+  count: number;
+  /** @nullable */
+  instructorId: string | null;
+}
+
+export interface RecoveryInstructorUser {
+  id: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+}
+
+export interface RecoveryInstructorLinkData {
+  instructors: RecoveryInstructorLink[];
+  users: RecoveryInstructorUser[];
+}
+
+export interface RecoveryInstructorLinkInput {
+  instructorName: string;
+  /** @nullable */
+  userId: string | null;
+}
+
+export interface RecoveryInstructorLinkResult {
+  instructorName: string;
+  linkedCount: number;
+  /** @nullable */
+  instructorId: string | null;
+}
+
 export interface CampusUpdate {
   name?: string;
   instituteId?: string;
@@ -238,64 +332,70 @@ export interface ProfileUpdate {
 }
 
 export type SearchStudentsParams = {
-  q: string;
-  limit?: number;
+q: string;
+limit?: number;
 };
 
 export type FetchStudentOverviewParams = {
-  /**
-   * SPI share token for public access (used when no staff session)
-   */
-  t?: string;
+/**
+ * SPI share token for public access (used when no staff session)
+ */
+t?: string;
 };
 
 export type FetchStudentSubjectsParams = {
-  /**
-   * SPI share token for public access (used when no staff session)
-   */
-  t?: string;
+/**
+ * SPI share token for public access (used when no staff session)
+ */
+t?: string;
 };
 
 export type FetchStudentRecentSessionsParams = {
-  /**
-   * SPI share token for public access (used when no staff session)
-   */
-  t?: string;
+/**
+ * SPI share token for public access (used when no staff session)
+ */
+t?: string;
 };
 
 export type FetchStudentQuizzesParams = {
-  /**
-   * SPI share token for public access (used when no staff session)
-   */
-  t?: string;
-};
-
-export type GetDashboardStudentsParams = {
-  search?: string;
-  limit?: number;
-  campus?: string;
-  section?: string;
-  subject?: string;
-  attendanceBand?: string;
+/**
+ * SPI share token for public access (used when no staff session)
+ */
+t?: string;
 };
 
 export type GetDashboardFiltersParams = {
-  /** When set, sections are limited to this campus */
-  campus?: string;
+/**
+ * When set, sections are limited to this campus
+ */
+campus?: string;
 };
 
-export interface DashboardFilters {
-  campuses: string[];
-  sections: string[];
-  updatedAt: string;
+export type GetDashboardStudentsParams = {
+search?: string;
+limit?: number;
+campus?: string;
+section?: string;
+/**
+ * Filter by subject title (subject-wise attendance)
+ */
+subject?: string;
+/**
+ * all | below50 | below80 | above80
+ */
+attendanceBand?: string;
+};
+
+export type ListInstructorRecoverySessionsParams = {
+date?: string;
 };
 
 export type ListTablesParams = {
-  dataset: string;
+dataset: string;
 };
 
 export type PreviewTableParams = {
-  dataset: string;
-  table: string;
-  limit?: number;
+dataset: string;
+table: string;
+limit?: number;
 };

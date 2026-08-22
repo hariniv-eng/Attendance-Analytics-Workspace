@@ -1085,6 +1085,162 @@ export async function getRecoveryProgress(
   };
 }
 
+export type SessionTrackerStatus =
+  | "not_taught"
+  | "ok"
+  | "needs_recovery"
+  | "recovery_scheduled"
+  | "recovered";
+
+export interface SessionTrackerAttendance {
+  presentCount: number;
+  totalCount: number;
+}
+
+export interface SessionTrackerRow {
+  sequenceNo: number;
+  weekNo: number | null;
+  topicTitle: string;
+  unitId: string | null;
+  attendancePct: number | null;
+  presentCount: number;
+  totalCount: number;
+  status: SessionTrackerStatus;
+  recoverySession: {
+    date: string;
+    instructorName: string;
+    instructorType: "campus" | "backup" | "unknown";
+    wasCovered: boolean | null;
+  } | null;
+}
+
+/**
+ * Combines the ordered Postgres recovery curriculum with already-aggregated
+ * BigQuery attendance. Recovery delivery fields come only from recovery
+ * sessions; regular-class instructors are deliberately not substituted.
+ */
+export async function getRecoverySessionTracker(
+  campus: string,
+  subject: string,
+  attendanceByTitle: ReadonlyMap<string, SessionTrackerAttendance>,
+  section?: string,
+): Promise<SessionTrackerRow[]> {
+  const [topics, progressRows, sessionRows] = await Promise.all([
+    db
+      .select({
+        id: recoveryTopicsTable.id,
+        sequenceNo: recoveryTopicsTable.sequenceNo,
+        weekNo: recoveryTopicsTable.weekNo,
+        topicTitle: recoveryTopicsTable.topicTitle,
+        unitId: recoveryTopicsTable.unitId,
+        bigquerySessionTitle: recoveryTopicsTable.bigquerySessionTitle,
+      })
+      .from(recoveryTopicsTable)
+      .where(
+        and(
+          eq(recoveryTopicsTable.campus, campus),
+          eq(recoveryTopicsTable.subject, subject),
+          eq(recoveryTopicsTable.isActive, true),
+        ),
+      )
+      .orderBy(asc(recoveryTopicsTable.sequenceNo)),
+    db
+      .select({
+        topicId: recoveryProgressTable.topicId,
+        section: recoveryProgressTable.section,
+        status: recoveryProgressTable.status,
+      })
+      .from(recoveryProgressTable)
+      .where(
+        and(
+          eq(recoveryProgressTable.campus, campus),
+          eq(recoveryProgressTable.subject, subject),
+        ),
+      ),
+    db
+      .select({
+        topicId: sessionTopicsTable.topicId,
+        wasCovered: sessionTopicsTable.wasCovered,
+        section: recoverySessionsTable.section,
+        date: recoverySessionsTable.scheduledDate,
+        instructorName: recoverySessionsTable.instructorName,
+        instructorType: recoverySessionsTable.instructorType,
+      })
+      .from(sessionTopicsTable)
+      .innerJoin(
+        recoverySessionsTable,
+        eq(recoverySessionsTable.id, sessionTopicsTable.sessionId),
+      )
+      .where(
+        and(
+          eq(recoverySessionsTable.campus, campus),
+          eq(recoverySessionsTable.subject, subject),
+        ),
+      )
+      .orderBy(desc(recoverySessionsTable.scheduledDate)),
+  ]);
+
+  const progressPriority = { pending: 1, scheduled: 2, completed: 3 } as const;
+  const progressByTopic = new Map<
+    string,
+    (typeof progressRows)[number]["status"]
+  >();
+  for (const row of progressRows) {
+    if (section && row.section !== null && row.section !== section) continue;
+    const current = progressByTopic.get(row.topicId);
+    if (!current || progressPriority[row.status] > progressPriority[current]) {
+      progressByTopic.set(row.topicId, row.status);
+    }
+  }
+
+  const recoverySessionByTopic = new Map<
+    string,
+    SessionTrackerRow["recoverySession"]
+  >();
+  for (const row of sessionRows) {
+    if (section && row.section !== null && row.section !== section) continue;
+    if (recoverySessionByTopic.has(row.topicId)) continue;
+    recoverySessionByTopic.set(row.topicId, {
+      date: row.date,
+      instructorName: row.instructorName,
+      instructorType: row.instructorType,
+      wasCovered: row.wasCovered,
+    });
+  }
+
+  return topics.map((topic) => {
+    const attendance = topic.bigquerySessionTitle
+      ? attendanceByTitle.get(topic.bigquerySessionTitle)
+      : undefined;
+    const presentCount = attendance?.presentCount ?? 0;
+    const totalCount = attendance?.totalCount ?? 0;
+    const attendancePct =
+      totalCount > 0
+        ? Math.round((presentCount / totalCount) * 1000) / 10
+        : null;
+    const progress = progressByTopic.get(topic.id);
+
+    let status: SessionTrackerStatus;
+    if (attendancePct === null) status = "not_taught";
+    else if (attendancePct >= 80) status = "ok";
+    else if (progress === "completed") status = "recovered";
+    else if (progress === "scheduled") status = "recovery_scheduled";
+    else status = "needs_recovery";
+
+    return {
+      sequenceNo: topic.sequenceNo,
+      weekNo: topic.weekNo,
+      topicTitle: topic.topicTitle,
+      unitId: topic.unitId,
+      attendancePct,
+      presentCount,
+      totalCount,
+      status,
+      recoverySession: recoverySessionByTopic.get(topic.id) ?? null,
+    };
+  });
+}
+
 export async function getCampusList(): Promise<string[]> {
   const rows = await bqQuery<{ institute_name: string }>(
     `SELECT DISTINCT institute_name FROM ${ATTENDANCE_TABLE} WHERE is_current_semester = 1 ORDER BY institute_name`,

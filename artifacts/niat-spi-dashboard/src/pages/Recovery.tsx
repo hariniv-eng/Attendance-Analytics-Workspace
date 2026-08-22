@@ -11,7 +11,15 @@ import {
 import { PageHeader } from "@/components/PageHeader";
 import { PageLoader } from "@/components/PageLoader";
 import { ErrorState } from "@/components/PageStates";
-import { AlertCircle, Download, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import {
+  AlertCircle,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  Download,
+  Loader2,
+} from "lucide-react";
 import { pctTextColor } from "@/lib/utils";
 import { exportCsv } from "@/lib/csv";
 import { useToast } from "@/hooks/use-toast";
@@ -39,6 +47,28 @@ interface RecoveryCampusData {
   totalStudentsInRecovery: number;
 }
 
+interface RecoveryProgress {
+  campus: string;
+  subject: string;
+  totalTopics: number;
+  topicsBelowThreshold: number;
+  topicsRecovered: number;
+  topicsRemaining: number;
+  recoveryCompletionPct: number;
+  sessionsHeld: number;
+  sessionsCancelled: number;
+  lastSession: { date: string; topics: string[] } | null;
+  nextScheduled: { date: string; topics: string[] } | null;
+}
+
+function formatRecoveryDate(date: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${date}T00:00:00`));
+}
+
 export default function Recovery() {
   const { toast } = useToast();
   const [selectedCampus, setSelectedCampus] = useState("");
@@ -47,6 +77,10 @@ export default function Recovery() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
+  const [recoveryProgress, setRecoveryProgress] =
+    useState<RecoveryProgress | null>(null);
+  const [progressLoading, setProgressLoading] = useState(false);
+  const [progressError, setProgressError] = useState("");
 
   const { data: filterOptions, isLoading: filtersLoading } =
     useGetDashboardFilters({});
@@ -92,6 +126,51 @@ export default function Recovery() {
       null
     );
   }, [recoveryData, selectedSubject]);
+
+  const selectedBigQuerySubject = selectedSubjectData?.subjectTitle;
+
+  useEffect(() => {
+    if (!selectedCampus || !selectedBigQuerySubject) {
+      setRecoveryProgress(null);
+      setProgressError("");
+      setProgressLoading(false);
+      return;
+    }
+
+    const progressSubject = selectedBigQuerySubject;
+    const controller = new AbortController();
+
+    async function fetchProgress() {
+      setProgressLoading(true);
+      setProgressError("");
+      setRecoveryProgress(null);
+
+      try {
+        const params = new URLSearchParams({
+          campus: selectedCampus,
+          subject: progressSubject,
+        });
+        const response = await fetch(`/api/dashboard/recovery-progress?${params}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error("Failed to load recovery progress");
+        }
+        const data = (await response.json()) as RecoveryProgress;
+        setRecoveryProgress(data);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setProgressError(
+          err instanceof Error ? err.message : "Failed to load recovery progress",
+        );
+      } finally {
+        if (!controller.signal.aborted) setProgressLoading(false);
+      }
+    }
+
+    fetchProgress();
+    return () => controller.abort();
+  }, [selectedCampus, selectedBigQuerySubject]);
 
   const filteredStudents = useMemo(() => {
     if (!selectedSubjectData) return [];
@@ -281,6 +360,92 @@ export default function Recovery() {
                       </Button>
                     </div>
                   </div>
+
+                  {progressLoading && (
+                    <div className="mb-4 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading recovery progress…
+                    </div>
+                  )}
+
+                  {progressError && !progressLoading && (
+                    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                      Recovery progress is temporarily unavailable.
+                    </div>
+                  )}
+
+                  {recoveryProgress && !progressLoading && (
+                    <section
+                      aria-label="Recovery progress summary"
+                      className="mb-4 rounded-lg border border-gray-200 bg-gray-50/70 px-3 py-3"
+                    >
+                      <div className="grid grid-cols-2 gap-3 lg:grid-cols-[0.85fr_2fr_0.9fr_1.7fr] lg:gap-0">
+                        <div className="flex items-center gap-2 lg:pr-4">
+                          <CalendarDays className="h-4 w-4 shrink-0 text-brand-600" />
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Sessions held</p>
+                            <p className="text-lg font-bold text-gray-900">
+                              {recoveryProgress.sessionsHeld}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="min-w-0 lg:border-l lg:border-gray-200 lg:px-4">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="flex items-center gap-2 text-xs font-medium text-gray-500">
+                              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+                              Topics recovered
+                            </p>
+                            <span className="text-xs font-semibold text-gray-700">
+                              {recoveryProgress.recoveryCompletionPct}%
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm font-bold text-gray-900">
+                            {recoveryProgress.topicsRecovered}{" "}
+                            <span className="font-medium text-gray-500">
+                              of {recoveryProgress.topicsBelowThreshold}
+                            </span>
+                          </p>
+                          <Progress
+                            value={Math.min(
+                              Math.max(recoveryProgress.recoveryCompletionPct, 0),
+                              100,
+                            )}
+                            className="mt-2 h-1.5 bg-emerald-100 [&>div]:bg-emerald-600"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 lg:border-l lg:border-gray-200 lg:px-4">
+                          <Clock3 className="h-4 w-4 shrink-0 text-amber-600" />
+                          <div>
+                            <p className="text-xs font-medium text-gray-500">Topics remaining</p>
+                            <p className="text-lg font-bold text-gray-900">
+                              {recoveryProgress.topicsRemaining}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="min-w-0 lg:border-l lg:border-gray-200 lg:pl-4">
+                          <p className="text-xs font-medium text-gray-500">Last session</p>
+                          {recoveryProgress.lastSession ? (
+                            <>
+                              <p className="mt-1 text-sm font-semibold text-gray-900">
+                                {formatRecoveryDate(recoveryProgress.lastSession.date)}
+                              </p>
+                              <p
+                                className="truncate text-xs text-gray-600"
+                                title={recoveryProgress.lastSession.topics.join(", ")}
+                              >
+                                {recoveryProgress.lastSession.topics.join(", ")}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="mt-1 text-sm text-gray-500">No session recorded</p>
+                          )}
+                        </div>
+                      </div>
+                    </section>
+                  )}
 
                   <div className="mb-4">
                     <input

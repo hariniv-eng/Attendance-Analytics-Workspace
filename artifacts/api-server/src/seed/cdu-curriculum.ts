@@ -1,4 +1,15 @@
-{
+export const CDU_CAMPUS = "Chaitanya Deemed-to-be University";
+
+interface CurriculumSourceTopic {
+  seq: number;
+  week: number;
+  module: string | null;
+  topicTitle: string;
+  unitId: string | null;
+  duration: string | null;
+}
+
+const CDU_CURRICULUM_SOURCE: Record<string, CurriculumSourceTopic[]> = {
   "GenAI": [
     {
       "seq": 1,
@@ -1307,4 +1318,17 @@
       "duration": "47.0"
     }
   ]
-}
+};
+
+export const CDU_CURRICULUM = Object.entries(CDU_CURRICULUM_SOURCE).flatMap(
+  ([subject, topics]) =>
+    topics.map((topic) => ({
+      campus: CDU_CAMPUS,
+      subject,
+      sequenceNo: topic.seq,
+      weekNo: topic.week,
+      moduleName: topic.module,
+      topicTitle: topic.topicTitle,
+      unitId: topic.unitId,
+    })),
+);

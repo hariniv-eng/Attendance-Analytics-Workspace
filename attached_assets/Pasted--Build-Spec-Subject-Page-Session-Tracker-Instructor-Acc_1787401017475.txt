@@ -1,0 +1,247 @@
+# Build Spec — Subject Page, Session Tracker & Instructor Access
+
+> Paste into Replit Agent. Build in the three phases below, stopping after each.
+
+---
+
+## Context
+
+Already in place from the previous step:
+
+- `recovery_topics` — 162 CDU lectures, 103 resolved to BigQuery session titles
+- `recovery_progress` — 41 topics marked completed
+- `recovery_sessions` — 22 delivered recovery sessions with instructor names
+- `recovery_session_topics` — the join, with `wasCovered`
+- `GET /api/dashboard/recovery-progress?campus=&subject=` — returns the summary
+
+`usersTable.role` already includes `instructor` in its enum, and users carry
+`campuses[]` and `subjects[]` arrays. No new role needs creating.
+
+---
+
+## Phase 1 — Move subject detail to its own page
+
+Today, selecting a subject in the Recovery tab expands detail further down the same
+page. Move that to a dedicated route instead.
+
+```
+/recovery                              subject list (existing)
+/recovery/:campus/:subject             NEW — subject detail page
+```
+
+The new page has **two tabs**:
+
+| Tab | Content |
+|---|---|
+| **Students** | the existing below-80% student list, moved here unchanged |
+| **Session Tracker** | new, see Phase 2 |
+
+Keep the recovery-progress summary strip (sessions held, topics recovered, remaining,
+last session) at the top of the page, above the tabs, so it stays visible on both.
+
+Preserve deep-linking: the URL should be shareable and survive a refresh.
+
+---
+
+## Phase 2 — Session Tracker tab
+
+Shows the full curriculum in sequence order, with delivery status for each lecture.
+
+### Columns
+
+| Column | Source |
+|---|---|
+| # | `recovery_topics.sequenceNo` |
+| Week | `recovery_topics.weekNo` |
+| Topic | `recovery_topics.topicTitle` |
+| Regular attendance % | BigQuery, aggregated across deliveries |
+| Status | `not_taught` / `taught_below_80` / `recovery_scheduled` / `recovered` |
+| Recovery date | `recovery_sessions.scheduledDate` |
+| Recovery instructor | `recovery_sessions.instructorName` |
+| Instructor type | `campus` or `backup` — see below |
+
+### Status derivation
+
+```
+no BigQuery data                         → not_taught
+has data, pct >= 80                      → ok (no recovery needed)
+has data, pct < 80, no progress row      → needs_recovery
+progress row status = 'scheduled'        → recovery_scheduled
+progress row status = 'completed'        → recovered
+```
+
+### Instructor and instructor type
+
+The name comes from `recovery_sessions.instructorName`, joined through
+`recovery_session_topics`. Alongside it, show whether that person is a **campus
+instructor** (on the subject's regular staff roster) or a **backup** (brought in to
+cover). Instructors vary within a subject, and the split matters — a subject leaning
+on backups is a staffing signal.
+
+#### New table
+
+```ts
+campusInstructorsTable
+  id              uuid pk
+  campus          text
+  subject         text
+  instructorName  text
+  instructorId    uuid nullable → usersTable.id
+  sections        text[]
+  isActive        boolean default true
+  unique(campus, subject, instructorName)
+  index(campus, subject)
+```
+
+Seed from `artifacts/api-server/src/seed/cdu-campus-instructors.ts` — 24 instructors
+across the 6 subjects, taken from the campus roster.
+
+Add `instructorType` to `recovery_sessions` as an enum (`campus` | `backup` |
+`unknown`), resolved at seed time and set explicitly for sessions created later.
+Storing it beats recomputing per request, because the match is fuzzy and should not
+silently change when a name is edited.
+
+#### Classifying
+
+Roster names are informal ("Divya", "Jammu", "Izhar") while recovery sessions record
+fuller ones ("Divya Partipati", "Jammu Tejaswini"). Match on **shared name tokens
+first**, falling back to per-token similarity; treat ≥ 0.75 as campus.
+
+Expected result for the 22 seeded sessions — 12 campus, 3 backup:
+
+```
+DSA       Raghavendar → Ragavendhra          CAMPUS
+          Asif        → Attar Asif           CAMPUS
+          Gattadi Vikranth                   BACKUP
+Backend   Kavya, Divya Partipati → Divya,
+          Irlapati Avinash → Avinash         CAMPUS
+          Praveen Kumar                      BACKUP
+          Varun Chakravarthy                 BACKUP
+Aptitude  Jammu Tejaswini → Jammu,
+          Sai Kiran → Sai Kiran Garipelly,
+          Jaswanth                           CAMPUS
+Math      Mir Nabeel → Mir Nabeel Uddin      CAMPUS
+English   Likitha → Likhitha                 CAMPUS
+GenAI     Izhaar, Mohammad Izhaar Ahmed
+            → Izhar                          CAMPUS
+```
+
+This classification is independently corroborated: the tracking sheet's own remark
+for Praveen Kumar says he covered Backend on 07 Jul *because no instructor was
+available*, and the matcher reaches BACKUP for him without reading that column.
+
+Because matching is fuzzy, make `instructorType` **admin-editable**. Note that
+"Izhaar" and "Mohammad Izhaar Ahmed" both resolve to the roster's "Izhar" — probably
+one person recorded two ways, which only someone who knows the team can confirm.
+
+Topics with no recovery session leave both cells blank. Do not fall back to who
+teaches the regular class; this tab is about recovery delivery only.
+
+### New endpoint
+
+```
+GET /api/dashboard/session-tracker?campus=&subject=&section=
+
+→ [{
+    sequenceNo, weekNo, topicTitle, unitId,
+    attendancePct, presentCount, totalCount,
+    status,
+    recoverySession: { date, instructorName, instructorType, wasCovered } | null
+  }]
+```
+
+Same `requireSession()` + `scopeForSession()` + 60s cache pattern as the neighbouring
+routes. Aggregate BigQuery deliveries by **summing presentCount and totalCount, then
+dividing** — never average the per-session percentages, since session sizes vary from
+60 to 1,279 students.
+
+---
+
+## Phase 3 — Instructor access and session completion
+
+### Role behaviour
+
+`instructor` already exists in the role enum. Define its scope:
+
+| Can | Cannot |
+|---|---|
+| See sessions where they are the assigned instructor | See other instructors' sessions |
+| See the curriculum for their own subjects | See campus-wide or cross-subject rollups |
+| Mark their own session's topics covered / not covered | Schedule or cancel sessions |
+| Report on their own sessions | Edit anyone else's records |
+
+Enforce in `scopeForSession()`. An instructor's `subjects[]` and `campuses[]` already
+constrain them; add a further filter on `recovery_sessions.instructorId`.
+
+Do not rely on a query parameter to identify the instructor — always take it from the
+session token.
+
+### Instructor screen
+
+Route: `/instructor` — deliberately simple, likely used on a phone right after class.
+
+```
+Today's session
+  DSA · CDU · Sections 5-8 · 5:30-7:00 pm
+
+  Assigned topics
+    ☐ Insertion in Linked List
+    ☐ Deletion in Linked List
+
+  Students attended  [ 42 ]
+
+  [ Submit report ]
+```
+
+### Submission endpoint
+
+```
+POST /api/recovery/sessions/:id/report
+body: { coveredTopicIds: string[], studentsAttended?: number }
+```
+
+Handler must:
+
+1. Verify the caller is the assigned instructor for that session (403 otherwise)
+2. For each assigned topic: set `sessionTopics.wasCovered`
+3. Covered → `recovery_progress.status = 'completed'`, `completedAt = now`
+4. Not covered → `recovery_progress.status = 'pending'` — returns to the queue
+5. Set session status: `conducted` (all covered) / `partial` (some) /
+   `no_show` (none, nobody attended)
+6. Stamp `reportedBy` and `reportedAt`
+7. Invalidate the recovery-progress and session-tracker caches for that campus+subject
+
+Wrap 2–6 in a transaction. A half-applied report leaves the queue inconsistent, and
+the carry-forward logic depends on progress rows being accurate.
+
+### Linking instructors to accounts
+
+The 22 seeded sessions carry `instructorName` as free text ("Asif",
+"Mohammad Izhaar Ahmed") with `instructorId` null, because they came from a
+spreadsheet. For an instructor to log in and report on their own session,
+`recovery_sessions.instructorId` must point at a real user.
+
+Add a small admin screen listing the distinct instructor names found in
+`recovery_sessions` beside a user picker. Offer name similarity as a suggestion but
+require a human to confirm — "Izhaar" and "Mohammad Izhaar Ahmed" are probably the
+same person, and only someone who knows the team can say so.
+
+Sessions created through the scheduler should set `instructorId` directly and copy
+the display name, so this backfill is a one-time exercise.
+
+---
+
+## Notes
+
+- Recovery sessions are currently **pooled across sections** — `recovery_sessions.section`
+  is null for all 22 seeded rows.
+- This tab tracks **recovery delivery only**. Who taught the regular lecture is a
+  separate question and is deliberately out of scope.
+- Topic selection must always be by `topicId`, never free text. The manual sheet
+  contained `Data Visualization - I`, `Data Visualisation 1` and `Data Visualization - 2`
+  for overlapping concepts; that ambiguity must not re-enter through the report form.
+- 59 of 162 lectures have no BigQuery data — they are weeks 5–10, not yet taught.
+  Show them as `not_taught`, not as 0% attendance.
+- **QA reports are out of scope.** The `qaReportUrls` column stays on
+  `recovery_sessions` (it is already populated for 18 of the 22 seeded sessions) but
+  is not displayed anywhere and is not collected in the instructor report form.

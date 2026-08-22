@@ -14,19 +14,13 @@ import {
   sessionTopicsTable,
 } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
-import { CDU_CURRICULUM, CDU_CAMPUS } from "./seed/cdu-curriculum.js";
+import {
+  CDU_CURRICULUM,
+  CDU_CAMPUS,
+  SUBJECT_TO_BIGQUERY,
+} from "./seed/cdu-curriculum.js";
 import { CDU_DELIVERED_SESSIONS } from "./seed/cdu-delivered-sessions.js";
 import { getSubjectSessions } from "./lib/queries.js";
-
-/** Curriculum subject → the subject name BigQuery stores. */
-export const SUBJECT_TO_BIGQUERY: Record<string, string> = {
-  DSA: "Design and Analysis of Algorithms",
-  Backend: "Back End Development",
-  Aptitude: "Logical Reasoning and Analytical Skills",
-  Math: "Probability and Statistics",
-  English: "Advanced Communication Skills",
-  GenAI: "AI For Finance",
-};
 
 /**
  * Titles drift between the prod sequence and BigQuery. Normalising both sides

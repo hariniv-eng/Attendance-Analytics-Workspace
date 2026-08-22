@@ -1,5 +1,22 @@
 export const CDU_CAMPUS = "Chaitanya Deemed-to-be University";
 
+/** Curriculum subject → the subject name BigQuery stores. */
+export const SUBJECT_TO_BIGQUERY: Record<string, string> = {
+  DSA: "Design and Analysis of Algorithms",
+  Backend: "Back End Development",
+  Aptitude: "Logical Reasoning and Analytical Skills",
+  Math: "Probability and Statistics",
+  English: "Advanced Communication Skills",
+  GenAI: "AI For Finance",
+};
+
+export const BIGQUERY_TO_CURRICULUM_SUBJECT = Object.fromEntries(
+  Object.entries(SUBJECT_TO_BIGQUERY).map(([curriculumSubject, bigQuerySubject]) => [
+    bigQuerySubject,
+    curriculumSubject,
+  ]),
+) as Record<string, string>;
+
 interface CurriculumSourceTopic {
   seq: number;
   week: number;

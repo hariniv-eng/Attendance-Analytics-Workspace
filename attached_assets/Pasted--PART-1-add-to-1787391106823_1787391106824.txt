@@ -1,0 +1,246 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// PART 1 — add to artifacts/api-server/src/lib/queries.ts
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { db } from "@workspace/db";
+import {
+  recoveryTopicsTable,
+  recoveryProgressTable,
+  recoverySessionsTable,
+  sessionTopicsTable,
+} from "@workspace/db";
+import { and, eq, sql, desc, asc, gte, inArray } from "drizzle-orm";
+
+export interface RecoveryProgressSummary {
+  campus: string;
+  subject: string;
+  /** Lectures in the curriculum for this campus + subject. */
+  totalTopics: number;
+  /** Lectures taught so far that fell below the 80% requirement. */
+  topicsBelowThreshold: number;
+  topicsRecovered: number;
+  topicsRemaining: number;
+  recoveryCompletionPct: number;
+  sessionsHeld: number;
+  sessionsCancelled: number;
+  lastSession: { date: string; topics: string[] } | null;
+  nextScheduled: { date: string; topics: string[] } | null;
+}
+
+/**
+ * Recovery progress for one campus + subject.
+ *
+ * `topicsBelowThreshold` is passed in rather than derived here: the caller
+ * already has per-topic attendance from BigQuery, and re-querying it inside
+ * this function would double the round trips on the dashboard's hot path.
+ */
+export async function getRecoveryProgress(
+  campus: string,
+  subject: string,
+  topicsBelowThreshold: number,
+): Promise<RecoveryProgressSummary> {
+  const scope = and(
+    eq(recoveryTopicsTable.campus, campus),
+    eq(recoveryTopicsTable.subject, subject),
+    eq(recoveryTopicsTable.isActive, true),
+  );
+
+  const [counts] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      recovered: sql<number>`count(*) filter (where ${recoveryProgressTable.status} = 'completed')::int`,
+    })
+    .from(recoveryTopicsTable)
+    .leftJoin(
+      recoveryProgressTable,
+      eq(recoveryProgressTable.topicId, recoveryTopicsTable.id),
+    )
+    .where(scope);
+
+  const [sessions] = await db
+    .select({
+      held: sql<number>`count(*) filter (where ${recoverySessionsTable.status} in ('conducted','partial'))::int`,
+      cancelled: sql<number>`count(*) filter (where ${recoverySessionsTable.status} in ('cancelled','no_show'))::int`,
+    })
+    .from(recoverySessionsTable)
+    .where(
+      and(
+        eq(recoverySessionsTable.campus, campus),
+        eq(recoverySessionsTable.subject, subject),
+      ),
+    );
+
+  const recovered = counts?.recovered ?? 0;
+
+  // Most recent conducted session, and the next planned one.
+  const [last] = await db
+    .select({
+      id: recoverySessionsTable.id,
+      date: recoverySessionsTable.scheduledDate,
+    })
+    .from(recoverySessionsTable)
+    .where(
+      and(
+        eq(recoverySessionsTable.campus, campus),
+        eq(recoverySessionsTable.subject, subject),
+        inArray(recoverySessionsTable.status, ["conducted", "partial"]),
+      ),
+    )
+    .orderBy(desc(recoverySessionsTable.scheduledDate))
+    .limit(1);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const [next] = await db
+    .select({
+      id: recoverySessionsTable.id,
+      date: recoverySessionsTable.scheduledDate,
+    })
+    .from(recoverySessionsTable)
+    .where(
+      and(
+        eq(recoverySessionsTable.campus, campus),
+        eq(recoverySessionsTable.subject, subject),
+        eq(recoverySessionsTable.status, "planned"),
+        gte(recoverySessionsTable.scheduledDate, today),
+      ),
+    )
+    .orderBy(asc(recoverySessionsTable.scheduledDate))
+    .limit(1);
+
+  async function topicsFor(sessionId: string | undefined) {
+    if (!sessionId) return [];
+    const rows = await db
+      .select({ title: recoveryTopicsTable.topicTitle })
+      .from(sessionTopicsTable)
+      .innerJoin(
+        recoveryTopicsTable,
+        eq(recoveryTopicsTable.id, sessionTopicsTable.topicId),
+      )
+      .where(eq(sessionTopicsTable.sessionId, sessionId))
+      .orderBy(asc(sessionTopicsTable.orderInSession));
+    return rows.map((r) => r.title);
+  }
+
+  return {
+    campus,
+    subject,
+    totalTopics: counts?.total ?? 0,
+    topicsBelowThreshold,
+    topicsRecovered: recovered,
+    topicsRemaining: Math.max(topicsBelowThreshold - recovered, 0),
+    recoveryCompletionPct:
+      topicsBelowThreshold > 0
+        ? Math.round((recovered / topicsBelowThreshold) * 1000) / 10
+        : 0,
+    sessionsHeld: sessions?.held ?? 0,
+    sessionsCancelled: sessions?.cancelled ?? 0,
+    lastSession: last
+      ? { date: last.date, topics: await topicsFor(last.id) }
+      : null,
+    nextScheduled: next
+      ? { date: next.date, topics: await topicsFor(next.id) }
+      : null,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PART 2 — add to artifacts/api-server/src/routes/dashboard.ts
+//
+//   import { getRecoveryProgress } from "../lib/queries.js";
+// ─────────────────────────────────────────────────────────────────────────────
+
+/*
+// Recovery progress for one subject at one campus. Powers the summary strip
+// above the student list in the Recovery tab.
+router.get(
+  "/recovery-progress",
+  requireSession(),
+  async (req, res): Promise<void> => {
+    const session = req.session!;
+    const scope = scopeForSession({
+      role: session.role as Role,
+      campuses: session.campuses,
+      subjects: session.subjects,
+    });
+    const q = req.query as Record<string, string | undefined>;
+    const campus = q["campus"];
+    const subject = q["subject"];
+    if (!campus || !subject) {
+      res.status(400).json({ error: "campus and subject required" });
+      return;
+    }
+
+    // A BOA must not be able to read another campus by editing the query param.
+    if (scope.campuses.length && !scope.campuses.includes(campus)) {
+      res.status(403).json({ error: "Not permitted for this campus" });
+      return;
+    }
+
+    const cacheKey = `recovery-progress:${session.role}:${JSON.stringify(scope)}:${campus}:${subject}`;
+    const cached = cacheGet<object>(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
+    try {
+      // Count topics below the requirement from the attendance side, then hand
+      // that figure to the recovery query.
+      const sessions = await getSubjectSessions(scope, { subject, campus });
+      const belowThreshold = sessions.filter(
+        (s) => (s.pct ?? 0) < REQUIRED_PCT,
+      ).length;
+
+      const progress = await getRecoveryProgress(
+        campus,
+        subject,
+        belowThreshold,
+      );
+      cacheSet(cacheKey, progress, 60 * 1000);
+      res.json(progress);
+    } catch (err) {
+      req.log.error({ err }, "Error fetching recovery progress");
+      res.status(500).json({ error: "Failed to fetch recovery progress" });
+    }
+  },
+);
+*/
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PART 3 — response shape, for the frontend
+// ─────────────────────────────────────────────────────────────────────────────
+
+/*
+GET /api/dashboard/recovery-progress
+      ?campus=Chaitanya%20Deemed-to-be%20University
+      &subject=Design%20and%20Analysis%20of%20Algorithms
+
+{
+  "campus": "Chaitanya Deemed-to-be University",
+  "subject": "DSA",
+  "totalTopics": 62,
+  "topicsBelowThreshold": 28,
+  "topicsRecovered": 7,
+  "topicsRemaining": 21,
+  "recoveryCompletionPct": 25.0,
+  "sessionsHeld": 4,
+  "sessionsCancelled": 0,
+  "lastSession": {
+    "date": "2026-08-05",
+    "topics": ["Introduction to Linked List"]
+  },
+  "nextScheduled": null
+}
+
+Suggested summary strip, above the existing student list:
+
+  Recovery sessions held      4
+  Topics recovered            7 of 28   ▓▓▓▓▓░░░░░░░░░░░░░░░  25%
+  Topics remaining           21
+  Last session         05 Aug — Introduction to Linked List
+
+Note the subject naming: this route takes the BigQuery subject name
+("Design and Analysis of Algorithms") because that is what the rest of the
+dashboard passes around, and maps it to the curriculum name ("DSA") internally.
+Reuse SUBJECT_TO_BIGQUERY from seed-recovery.ts, inverted.
+*/

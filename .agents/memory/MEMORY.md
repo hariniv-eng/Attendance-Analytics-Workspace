@@ -1,3 +1,4 @@
 - [GitHub push via connector API](github-push-via-api.md) — no raw token from connector; push via Git Data API through proxyFetch; base64 binaries inside the impure fn, never via shell pipes.
 - [Root TypeScript scripts](root-typescript-scripts.md) — root `pnpm tsx` is not declared and fails; use a package-owned script or explicitly declare the runner instead of relying on transitive bins.
 - [Seeding & RBAC scope quirks](seed-rbac-scope.md) — superadmin only via direct insert; empty subjects[] = campus-wide visibility; prod is seeded by one-time startup backfill (skip if any seed account exists).
+- [Custom staff authentication](custom-staff-auth.md) — preserve and improve the existing staff sign-in flow; do not introduce a replacement auth system without a new explicit request.

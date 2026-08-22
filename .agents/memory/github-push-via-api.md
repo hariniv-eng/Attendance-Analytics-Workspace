@@ -7,3 +7,5 @@ The GitHub connector never exposes a raw token (client.auth() returns type=unaut
 **Why:** git CLI has no credentials in this workspace; the proxy injects auth server-side only.
 
 **How to apply:** For binary files, base64-encode them with node:fs *inside the same "use impure" function* that makes the API call. Do NOT pipe base64 through shellExec/readFile — sandbox output caps silently truncate large outputs and produce corrupt blobs (verify with `git hash-object` vs the returned blob sha).
+
+For text files that must match the working tree exactly, read them with the file callback rather than using shell-command output as the GitHub blob source; shell output can normalize LF content to CRLF. After the push, fetch and require a clean path-scoped diff against `origin/main`.

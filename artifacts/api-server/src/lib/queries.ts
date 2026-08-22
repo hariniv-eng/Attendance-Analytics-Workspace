@@ -11,7 +11,17 @@ import {
   recoveryTopicsTable,
   sessionTopicsTable,
 } from "@workspace/db";
-import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { SessionScope } from "./rbac.js";
 
 /**
@@ -949,6 +959,36 @@ export interface RecoveryProgressSummary {
   nextScheduled: { date: string; topics: string[] } | null;
 }
 
+export type SessionTrackerStatus =
+  | "not_taught"
+  | "ok"
+  | "needs_recovery"
+  | "recovery_scheduled"
+  | "recovered";
+
+export interface SessionTrackerRow {
+  sequenceNo: number;
+  weekNo: number | null;
+  topicTitle: string;
+  unitId: string | null;
+  attendancePct: number | null;
+  presentCount: number | null;
+  totalCount: number | null;
+  status: SessionTrackerStatus;
+  recoverySession: {
+    id: string;
+    date: string;
+    instructorName: string;
+    instructorType: "campus" | "backup" | "unknown";
+    wasCovered: boolean | null;
+  } | null;
+}
+
+export interface RecoveryTopicAttendance {
+  presentCount: number;
+  totalCount: number;
+}
+
 export async function getResolvedRecoverySessionTitles(
   campus: string,
   subject: string,
@@ -967,6 +1007,172 @@ export async function getResolvedRecoverySessionTitles(
   return new Set(
     rows.flatMap((row) => (row.title ? [row.title] : [])),
   );
+}
+
+export async function getSessionTracker(
+  campus: string,
+  subject: string,
+  attendanceByTitle: ReadonlyMap<string, RecoveryTopicAttendance>,
+  section?: string,
+): Promise<SessionTrackerRow[]> {
+  const topics = await db
+    .select({
+      id: recoveryTopicsTable.id,
+      sequenceNo: recoveryTopicsTable.sequenceNo,
+      weekNo: recoveryTopicsTable.weekNo,
+      topicTitle: recoveryTopicsTable.topicTitle,
+      unitId: recoveryTopicsTable.unitId,
+      bigquerySessionTitle: recoveryTopicsTable.bigquerySessionTitle,
+    })
+    .from(recoveryTopicsTable)
+    .where(
+      and(
+        eq(recoveryTopicsTable.campus, campus),
+        eq(recoveryTopicsTable.subject, subject),
+        eq(recoveryTopicsTable.isActive, true),
+      ),
+    )
+    .orderBy(asc(recoveryTopicsTable.sequenceNo));
+
+  const progressRows = await db
+    .select({
+      topicId: recoveryProgressTable.topicId,
+      status: recoveryProgressTable.status,
+      section: recoveryProgressTable.section,
+    })
+    .from(recoveryProgressTable)
+    .where(
+      and(
+        eq(recoveryProgressTable.campus, campus),
+        eq(recoveryProgressTable.subject, subject),
+        section
+          ? or(
+              isNull(recoveryProgressTable.section),
+              eq(recoveryProgressTable.section, section),
+            )
+          : undefined,
+      ),
+    );
+
+  const progressRank = { pending: 1, scheduled: 2, completed: 3 } as const;
+  const progressByTopic = new Map<
+    string,
+    { status: keyof typeof progressRank; score: number }
+  >();
+  for (const row of progressRows) {
+    const score =
+      progressRank[row.status] + (section && row.section === section ? 10 : 0);
+    const current = progressByTopic.get(row.topicId);
+    if (!current || score > current.score) {
+      progressByTopic.set(row.topicId, { status: row.status, score });
+    }
+  }
+
+  const recoveryRows = await db
+    .select({
+      topicId: sessionTopicsTable.topicId,
+      id: recoverySessionsTable.id,
+      date: recoverySessionsTable.scheduledDate,
+      instructorName: recoverySessionsTable.instructorName,
+      instructorType: recoverySessionsTable.instructorType,
+      wasCovered: sessionTopicsTable.wasCovered,
+      sessionStatus: recoverySessionsTable.status,
+      section: recoverySessionsTable.section,
+    })
+    .from(sessionTopicsTable)
+    .innerJoin(
+      recoverySessionsTable,
+      eq(recoverySessionsTable.id, sessionTopicsTable.sessionId),
+    )
+    .where(
+      and(
+        eq(recoverySessionsTable.campus, campus),
+        eq(recoverySessionsTable.subject, subject),
+        section
+          ? or(
+              isNull(recoverySessionsTable.section),
+              eq(recoverySessionsTable.section, section),
+            )
+          : undefined,
+      ),
+    )
+    .orderBy(
+      desc(recoverySessionsTable.scheduledDate),
+      desc(recoverySessionsTable.createdAt),
+    );
+
+  const recoveryByTopic = new Map<string, typeof recoveryRows>();
+  for (const row of recoveryRows) {
+    const rows = recoveryByTopic.get(row.topicId) ?? [];
+    rows.push(row);
+    recoveryByTopic.set(row.topicId, rows);
+  }
+
+  return topics.map((topic) => {
+    const attendance = topic.bigquerySessionTitle
+      ? attendanceByTitle.get(topic.bigquerySessionTitle)
+      : undefined;
+    const hasAttendance = Boolean(attendance && attendance.totalCount > 0);
+    const attendancePct =
+      attendance && attendance.totalCount > 0
+        ? Math.round(
+            (attendance.presentCount / attendance.totalCount) * 1000,
+          ) / 10
+        : null;
+    const progressStatus = progressByTopic.get(topic.id)?.status;
+
+    let status: SessionTrackerStatus;
+    if (!hasAttendance || attendancePct === null) {
+      status = "not_taught";
+    } else if (attendancePct >= 80) {
+      status = "ok";
+    } else if (progressStatus === "completed") {
+      status = "recovered";
+    } else if (progressStatus === "scheduled") {
+      status = "recovery_scheduled";
+    } else {
+      status = "needs_recovery";
+    }
+
+    const candidateRows = (recoveryByTopic.get(topic.id) ?? [])
+      .filter((row) =>
+        ["planned", "conducted", "partial"].includes(row.sessionStatus),
+      )
+      .sort((left, right) => {
+        if (!section) return 0;
+        return Number(right.section === section) - Number(left.section === section);
+      });
+    const recovery =
+      (progressStatus === "scheduled"
+        ? candidateRows.find((row) => row.sessionStatus === "planned")
+        : progressStatus === "completed"
+          ? candidateRows.find(
+              (row) =>
+                row.wasCovered === true &&
+                ["conducted", "partial"].includes(row.sessionStatus),
+            )
+          : undefined) ?? candidateRows[0];
+
+    return {
+      sequenceNo: topic.sequenceNo,
+      weekNo: topic.weekNo,
+      topicTitle: topic.topicTitle,
+      unitId: topic.unitId,
+      attendancePct,
+      presentCount: hasAttendance ? attendance!.presentCount : null,
+      totalCount: hasAttendance ? attendance!.totalCount : null,
+      status,
+      recoverySession: recovery
+        ? {
+            id: recovery.id,
+            date: recovery.date,
+            instructorName: recovery.instructorName,
+            instructorType: recovery.instructorType,
+            wasCovered: recovery.wasCovered,
+          }
+        : null,
+    };
+  });
 }
 
 /**
@@ -1085,6 +1291,7 @@ export async function getRecoveryProgress(
   };
 }
 
+/*
 export type SessionTrackerStatus =
   | "not_taught"
   | "ok"
@@ -1118,7 +1325,7 @@ export interface SessionTrackerRow {
  * Combines the ordered Postgres recovery curriculum with already-aggregated
  * BigQuery attendance. Recovery delivery fields come only from recovery
  * sessions; regular-class instructors are deliberately not substituted.
- */
+ * /
 export async function getRecoverySessionTracker(
   campus: string,
   subject: string,
@@ -1240,6 +1447,7 @@ export async function getRecoverySessionTracker(
     };
   });
 }
+*/
 
 export async function getCampusList(): Promise<string[]> {
   const rows = await bqQuery<{ institute_name: string }>(

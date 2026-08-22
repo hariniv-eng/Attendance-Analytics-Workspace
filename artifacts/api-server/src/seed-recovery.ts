@@ -476,28 +476,24 @@ async function seedDeliveredSessions() {
         })
         .onConflictDoNothing();
 
-      const existingProgress = await db
-        .select({ id: recoveryProgressTable.id })
-        .from(recoveryProgressTable)
-        .where(
-          and(
-            eq(recoveryProgressTable.campus, CDU_CAMPUS),
-            eq(recoveryProgressTable.subject, s.subject),
-            sql`${recoveryProgressTable.section} is null`,
-            eq(recoveryProgressTable.topicId, topic.id),
-          ),
-        )
-        .limit(1);
-      if (!existingProgress[0]) {
-        await db.insert(recoveryProgressTable).values({
+      await db
+        .insert(recoveryProgressTable)
+        .values({
           campus: CDU_CAMPUS,
           subject: s.subject,
           section: null,
           topicId: topic.id,
           status: "completed",
           completedAt: new Date(s.scheduledDate),
+        })
+        .onConflictDoNothing({
+          target: [
+            recoveryProgressTable.campus,
+            recoveryProgressTable.subject,
+            recoveryProgressTable.topicId,
+          ],
+          where: sql`${recoveryProgressTable.section} is null`,
         });
-      }
 
       topicCount++;
     }

@@ -21,8 +21,8 @@ args = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
 NODE_ENV = "production"
 
 [services.production.run]
-# we don't run through pnpm to make startup faster in production
-args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+# Seed recovery data once when production has no recovery curriculum yet.
+args = ["sh", "-c", "node --enable-source-maps artifacts/api-server/dist/seed-recovery.mjs --if-empty && exec node --enable-source-maps artifacts/api-server/dist/index.mjs"]
 
 [services.production.run.env]
 PORT = "8080"

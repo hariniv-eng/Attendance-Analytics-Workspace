@@ -506,6 +506,23 @@ async function seedDeliveredSessions() {
 }
 
 async function main() {
+  if (process.argv.includes("--if-empty")) {
+    const [existing] = await db
+      .select({
+        topics: sql<number>`count(*)`,
+      })
+      .from(recoveryTopicsTable)
+      .where(eq(recoveryTopicsTable.campus, CDU_CAMPUS));
+
+    if (Number(existing?.topics ?? 0) > 0) {
+      logger.info(
+        { topics: Number(existing?.topics ?? 0) },
+        "Recovery curriculum already seeded; skipping",
+      );
+      process.exit(0);
+    }
+  }
+
   await seedCurriculum();
   await seedCampusInstructors();
   await seedDeliveredSessions();

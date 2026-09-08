@@ -37,6 +37,7 @@ import type {
   FetchStudentSubjectsParams,
   GetDashboardFiltersParams,
   GetDashboardStudentsParams,
+  GetSubjectProdSequenceParams,
   HealthStatus,
   InstructorRecoveryCurriculum,
   InstructorRecoverySession,
@@ -61,6 +62,7 @@ import type {
   StudentQuizzes,
   StudentSearchResult,
   SubjectAttendance,
+  SubjectProdSequenceItem,
   User,
   UserInput,
   UserUpdate
@@ -1144,6 +1146,90 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetDashboardSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSubjectProdSequenceUrl = (params: GetSubjectProdSequenceParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/dashboard/prod-sequence?${stringifiedParams}` : `/api/dashboard/prod-sequence`
+}
+
+/**
+ * @summary Get the ordered production curriculum and completion state for a subject
+ */
+export const getSubjectProdSequence = async (params: GetSubjectProdSequenceParams, options?: RequestInit): Promise<SubjectProdSequenceItem[]> => {
+
+  return customFetch<SubjectProdSequenceItem[]>(getGetSubjectProdSequenceUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSubjectProdSequenceQueryKey = (params?: GetSubjectProdSequenceParams,) => {
+    return [
+    `/api/dashboard/prod-sequence`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetSubjectProdSequenceQueryOptions = <TData = Awaited<ReturnType<typeof getSubjectProdSequence>>, TError = ErrorType<unknown>>(params: GetSubjectProdSequenceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSubjectProdSequence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSubjectProdSequenceQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSubjectProdSequence>>> = ({ signal }) => getSubjectProdSequence(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSubjectProdSequence>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSubjectProdSequenceQueryResult = NonNullable<Awaited<ReturnType<typeof getSubjectProdSequence>>>
+export type GetSubjectProdSequenceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get the ordered production curriculum and completion state for a subject
+ */
+
+export function useGetSubjectProdSequence<TData = Awaited<ReturnType<typeof getSubjectProdSequence>>, TError = ErrorType<unknown>>(
+ params: GetSubjectProdSequenceParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSubjectProdSequence>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSubjectProdSequenceQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

@@ -10,6 +10,7 @@ import {
   getSubjectSessions,
   getSessionStudents,
   getCampusSessions,
+  getSubjectProdSequence,
   getRecoveryProgress,
   getResolvedRecoverySessionTitles,
   getSessionTracker,
@@ -140,6 +141,50 @@ router.get("/subjects", requireSession(), async (req, res): Promise<void> => {
     res.status(500).json({ error: "Failed to fetch subject attendance" });
   }
 });
+
+router.get(
+  "/prod-sequence",
+  requireSession(),
+  async (req, res): Promise<void> => {
+    const session = req.session!;
+    const scope = scopeForSession({
+      role: session.role as Role,
+      campuses: session.campuses,
+      subjects: session.subjects,
+    });
+    const query = req.query as Record<string, string | undefined>;
+    const campus = query["campus"];
+    const subject = query["subject"];
+    const semester = query["semester"] || undefined;
+    if (!campus || !subject) {
+      res.status(400).json({ error: "campus and subject required" });
+      return;
+    }
+    if (scope.campuses?.length && !scope.campuses.includes(campus)) {
+      res.status(403).json({ error: "Not permitted for this campus" });
+      return;
+    }
+    if (scope.subjects?.length && !scope.subjects.includes(subject)) {
+      res.status(403).json({ error: "Not permitted for this subject" });
+      return;
+    }
+
+    const cacheKey = `prod-sequence:${session.role}:${JSON.stringify(scope)}:${campus}:${subject}:${semester ?? ""}`;
+    const cached = cacheGet<object>(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+    try {
+      const rows = await getSubjectProdSequence(campus, subject, semester);
+      cacheSet(cacheKey, rows, 60 * 1000);
+      res.json(rows);
+    } catch (err) {
+      req.log.error({ err }, "Error fetching subject prod sequence");
+      res.status(500).json({ error: "Failed to fetch subject prod sequence" });
+    }
+  },
+);
 
 // Campus rollup for the Campus-wise Stats view. Scope-filtered like every
 // other dashboard route, so a BOA only ever sees their own campuses.

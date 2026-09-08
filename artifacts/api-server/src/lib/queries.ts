@@ -1,6 +1,7 @@
 import {
   bqQuery,
   pct,
+  PROD_SEQUENCE_TABLE,
   validateStudentId,
   normalizeStudentId,
 } from "./bigquery.js";
@@ -886,6 +887,82 @@ export interface RecoveryStudent {
   attendancePct: number;
   presentCount: number;
   totalCount: number;
+}
+
+export interface SubjectProdSequenceItem {
+  sessionId: string;
+  order: number;
+  week: number | null;
+  topicTitle: string;
+  sessionType: string | null;
+  completed: boolean;
+  completedAt: string | null;
+  completedSections: number;
+  totalSections: number;
+}
+
+export async function getSubjectProdSequence(
+  campus: string,
+  subject: string,
+  semester?: string,
+): Promise<SubjectProdSequenceItem[]> {
+  const params: Record<string, unknown> = { campus, subject };
+  const semesterClause = semester
+    ? "semester_title = @semester"
+    : "is_current_semester = 1";
+  if (semester) params["semester"] = semester;
+
+  const rows = await bqQuery<{
+    session_id: string;
+    sequence_order: string;
+    week_count: string | null;
+    session_title: string;
+    session_type: string | null;
+    completed: boolean | string;
+    completed_at: string | null;
+    completed_sections: string;
+    total_sections: string;
+  }>(
+    `SELECT
+       session_id,
+       MIN(COALESCE(calculated_session_id_order, session_id_order, schedule_rn)) AS sequence_order,
+       MIN(week_count) AS week_count,
+       ANY_VALUE(session_title) AS session_title,
+       ANY_VALUE(session_type) AS session_type,
+       COUNTIF(UPPER(COALESCE(session_status, '')) = 'COMPLETED') > 0 AS completed,
+       CAST(MIN(IF(
+         UPPER(COALESCE(session_status, '')) = 'COMPLETED',
+         DATE(session_start_datetime),
+         NULL
+       )) AS STRING) AS completed_at,
+       COUNT(DISTINCT IF(
+         UPPER(COALESCE(session_status, '')) = 'COMPLETED',
+         section_id,
+         NULL
+       )) AS completed_sections,
+       COUNT(DISTINCT section_id) AS total_sections
+     FROM ${PROD_SEQUENCE_TABLE}
+     WHERE institute_name = @campus
+       AND course_title = @subject
+       AND ${semesterClause}
+       AND session_id IS NOT NULL
+       AND session_title IS NOT NULL
+     GROUP BY session_id
+     ORDER BY sequence_order, session_title`,
+    params,
+  );
+
+  return rows.map((row) => ({
+    sessionId: row.session_id,
+    order: Number(row.sequence_order),
+    week: row.week_count === null ? null : Number(row.week_count),
+    topicTitle: row.session_title,
+    sessionType: row.session_type ?? null,
+    completed: row.completed === true || row.completed === "true",
+    completedAt: row.completed_at ?? null,
+    completedSections: Number(row.completed_sections),
+    totalSections: Number(row.total_sections),
+  }));
 }
 
 export interface RecoverySubjectCard {

@@ -57,6 +57,18 @@ interface RecoveryProgress {
   nextScheduled: { date: string; topics: string[] } | null;
 }
 
+interface SubjectProdSequenceItem {
+  sessionId: string;
+  order: number;
+  week: number | null;
+  topicTitle: string;
+  sessionType: string | null;
+  completed: boolean;
+  completedAt: string | null;
+  completedSections: number;
+  totalSections: number;
+}
+
 /*
 interface SessionTrackerRow {
   sequenceNo: number;
@@ -717,6 +729,9 @@ export default function RecoverySubjectDetail() {
   const [trackerLoading, setTrackerLoading] = useState(false);
   const [trackerError, setTrackerError] = useState("");
   const [updatingInstructorType, setUpdatingInstructorType] = useState<string | null>(null);
+  const [prodSequence, setProdSequence] = useState<SubjectProdSequenceItem[] | null>(null);
+  const [prodSequenceLoading, setProdSequenceLoading] = useState(false);
+  const [prodSequenceError, setProdSequenceError] = useState("");
 
   useEffect(() => {
     if (!campus) return;
@@ -823,6 +838,43 @@ export default function RecoverySubjectDetail() {
       controller.abort();
     };
   }, [campus, subject]);
+
+  useEffect(() => {
+    if (!campus || !subject) return;
+    const controller = new AbortController();
+    let active = true;
+
+    async function fetchProdSequence() {
+      setProdSequenceLoading(true);
+      setProdSequenceError("");
+      try {
+        const queryParams = new URLSearchParams({
+          campus: campus!,
+          subject: subject!,
+        });
+        if (semester) queryParams.set("semester", semester);
+        const response = await fetch(`/api/dashboard/prod-sequence?${queryParams}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Failed to load prod sequence");
+        const data = (await response.json()) as SubjectProdSequenceItem[];
+        if (active) setProdSequence(data);
+      } catch (err) {
+        if (!active || (err instanceof DOMException && err.name === "AbortError")) return;
+        setProdSequenceError(
+          err instanceof Error ? err.message : "Failed to load prod sequence",
+        );
+      } finally {
+        if (active) setProdSequenceLoading(false);
+      }
+    }
+
+    fetchProdSequence();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [campus, semester, subject]);
 
   useEffect(() => {
     if (!campus || !subject) return;
@@ -1116,11 +1168,78 @@ export default function RecoverySubjectDetail() {
         </section>
       )}
 
-      <Tabs defaultValue="students" className="mt-2">
+      <Tabs defaultValue="prod-sequence" className="mt-2">
         <TabsList className="mb-4">
+          <TabsTrigger value="prod-sequence">Prod Sequence</TabsTrigger>
           <TabsTrigger value="students">Student List</TabsTrigger>
           <TabsTrigger value="sessions">Session Tracker</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="prod-sequence" className="space-y-4">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {prodSequenceLoading ? (
+              <div className="flex min-h-[300px] flex-col items-center justify-center p-12 text-center">
+                <Loader2 className="mb-4 h-8 w-8 animate-spin text-brand-600" />
+                <p className="text-sm text-slate-500">Loading curriculum sequence...</p>
+              </div>
+            ) : prodSequenceError ? (
+              <div className="flex min-h-[300px] flex-col items-center justify-center p-12 text-center">
+                <Clock3 className="mb-4 h-7 w-7 text-rose-600" />
+                <p className="mb-1 text-sm font-medium text-slate-900">Failed to load curriculum</p>
+                <p className="text-sm text-slate-500">{prodSequenceError}</p>
+              </div>
+            ) : prodSequence?.length === 0 ? (
+              <div className="flex min-h-[300px] items-center justify-center bg-slate-50/50 p-12 text-center text-slate-500">
+                No prod sequence is available for this subject and semester.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <caption className="sr-only">
+                    Ordered production curriculum for {selectedSubjectData.subjectTitle}.
+                  </caption>
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50">
+                      <th className="w-20 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Order</th>
+                      <th className="w-20 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Week</th>
+                      <th className="min-w-[300px] px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Topic</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Type</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Progress</th>
+                      <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">Completed</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {prodSequence?.map((item) => (
+                      <tr key={item.sessionId} className="transition-colors hover:bg-brand-50/30">
+                        <td className="px-5 py-4 font-medium tabular-nums text-slate-600">{item.order}</td>
+                        <td className="px-5 py-4 tabular-nums text-slate-600">{item.week ?? "-"}</td>
+                        <td className="px-5 py-4 font-medium text-slate-900">{item.topicTitle}</td>
+                        <td className="px-5 py-4 text-slate-600">{item.sessionType || "-"}</td>
+                        <td className="px-5 py-4">
+                          <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${
+                            item.completed
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-slate-200 bg-slate-50 text-slate-600"
+                          }`}>
+                            {item.completed ? "Completed" : "Pending"}
+                          </span>
+                          {item.totalSections > 0 && (
+                            <span className="ml-2 text-xs text-slate-500">
+                              {item.completedSections}/{item.totalSections} sections
+                            </span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-4 text-slate-700">
+                          {item.completedAt ? formatRecoveryDate(item.completedAt) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </TabsContent>
 
         <TabsContent value="students" className="space-y-4">
           <div className="relative">

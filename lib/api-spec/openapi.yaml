@@ -304,6 +304,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
 
+  /dashboard/prod-sequence:
+    get:
+      operationId: getSubjectProdSequence
+      tags: [dashboard]
+      summary: Get the ordered production curriculum and completion state for a subject
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: subject
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ordered subject production sequence
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubjectProdSequenceItem"
+
   /dashboard/filters:
     get:
       operationId: getDashboardFilters
@@ -728,6 +759,30 @@ paths:
 
 components:
   schemas:
+    SubjectProdSequenceItem:
+      type: object
+      required: [sessionId, order, week, topicTitle, sessionType, completed, completedAt, completedSections, totalSections]
+      properties:
+        sessionId:
+          type: string
+        order:
+          type: integer
+        week:
+          type: ["integer", "null"]
+        topicTitle:
+          type: string
+        sessionType:
+          type: ["string", "null"]
+        completed:
+          type: boolean
+        completedAt:
+          type: ["string", "null"]
+          format: date
+        completedSections:
+          type: integer
+        totalSections:
+          type: integer
+
     RecoveryStudent:
       type: object
       required: [studentId, studentName, sectionName, attendancePct, presentCount, totalCount]

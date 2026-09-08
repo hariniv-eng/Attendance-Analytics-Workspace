@@ -34,6 +34,8 @@ export const LoginResponse = zod.object({
   "isActive": zod.boolean().optional(),
   "lastLoginAt": zod.string().nullish()
 })
+
+
 /**
  * @summary Logout
  */
@@ -287,6 +289,29 @@ export const GetDashboardSummaryResponse = zod.object({
 })),
   "updatedAt": zod.string().optional()
 })
+
+
+/**
+ * @summary Get the ordered production curriculum and completion state for a subject
+ */
+export const GetSubjectProdSequenceQueryParams = zod.object({
+  "campus": zod.coerce.string(),
+  "subject": zod.coerce.string(),
+  "semester": zod.coerce.string().optional()
+})
+
+export const GetSubjectProdSequenceResponseItem = zod.object({
+  "sessionId": zod.string(),
+  "order": zod.number(),
+  "week": zod.number().nullable(),
+  "topicTitle": zod.string(),
+  "sessionType": zod.string().nullable(),
+  "completed": zod.boolean(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedSections": zod.number(),
+  "totalSections": zod.number()
+})
+export const GetSubjectProdSequenceResponse = zod.array(GetSubjectProdSequenceResponseItem)
 
 
 /**

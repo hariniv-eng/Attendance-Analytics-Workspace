@@ -3,6 +3,9 @@ import { createSign } from "node:crypto";
 const BQ_PROJECT_ID = process.env.BQ_PROJECT_ID ?? "kossip-helpers";
 const BQ_LOCATION = process.env.BQ_LOCATION ?? "asia-south1";
 
+export const PROD_SEQUENCE_TABLE =
+  "`kossip-helpers.niat_post_onboarding_engagement_ai_analytics_workspace.niat_schedule_details_as_per_prod_sequence`";
+
 interface ServiceAccount {
   client_email: string;
   private_key: string;

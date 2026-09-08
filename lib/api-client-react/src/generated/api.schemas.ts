@@ -5,6 +5,21 @@
  * NIAT SPI Platform API
  * OpenAPI spec version: 0.1.0
  */
+export interface SubjectProdSequenceItem {
+  sessionId: string;
+  order: number;
+  /** @nullable */
+  week: number | null;
+  topicTitle: string;
+  /** @nullable */
+  sessionType: string | null;
+  completed: boolean;
+  /** @nullable */
+  completedAt: string | null;
+  completedSections: number;
+  totalSections: number;
+}
+
 export interface RecoveryStudent {
   studentId: string;
   studentName: string;
@@ -401,6 +416,12 @@ export type ListRecoveryStudentsParams = {
 campus: string;
 semester: string;
 subject: string;
+};
+
+export type GetSubjectProdSequenceParams = {
+campus: string;
+subject: string;
+semester?: string;
 };
 
 export type GetDashboardFiltersParams = {

@@ -5,6 +5,30 @@
  * NIAT SPI Platform API
  * OpenAPI spec version: 0.1.0
  */
+export interface RecoveryStudent {
+  studentId: string;
+  studentName: string;
+  /** @nullable */
+  sectionName: string | null;
+  attendancePct: number;
+  presentCount: number;
+  totalCount: number;
+}
+
+export interface RecoverySubjectCard {
+  subjectTitle: string;
+  attendancePct: number;
+  studentsBelow80Count: number;
+  students: RecoveryStudent[];
+}
+
+export interface RecoveryCampusData {
+  campus: string;
+  subjects: RecoverySubjectCard[];
+  totalSubjectsInRecovery: number;
+  totalStudentsInRecovery: number;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -362,6 +386,21 @@ export type FetchStudentQuizzesParams = {
  * SPI share token for public access (used when no staff session)
  */
 t?: string;
+};
+
+export type ListRecoverySemestersParams = {
+campus: string;
+};
+
+export type ListRecoverySubjectsParams = {
+campus: string;
+semester?: string;
+};
+
+export type ListRecoveryStudentsParams = {
+campus: string;
+semester: string;
+subject: string;
 };
 
 export type GetDashboardFiltersParams = {

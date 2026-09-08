@@ -41,8 +41,15 @@ const QUIZ_TABLE =
 function scopeClause(
   scope: SessionScope,
   params: Record<string, unknown>,
+  options: { semester?: string; currentSemester?: boolean } = {},
 ): string {
-  const clauses: string[] = ["is_current_semester = 1"];
+  const clauses: string[] = [];
+  if (options.semester) {
+    clauses.push("derived_semester_title = @semester");
+    params["semester"] = options.semester;
+  } else if (options.currentSemester !== false) {
+    clauses.push("is_current_semester = 1");
+  }
   if (scope.campuses && scope.campuses.length > 0) {
     clauses.push("institute_name IN UNNEST(@campuses)");
     params["campuses"] = scope.campuses;
@@ -51,7 +58,31 @@ function scopeClause(
     clauses.push("subject_title IN UNNEST(@subjects)");
     params["subjects"] = scope.subjects;
   }
-  return clauses.join(" AND ");
+  return clauses.length > 0 ? clauses.join(" AND ") : "TRUE";
+}
+
+export async function getRecoverySemesters(
+  campus: string,
+  scope: SessionScope,
+): Promise<string[]> {
+  const params: Record<string, unknown> = { campus };
+  const where = scopeClause(scope, params, { currentSemester: false });
+  const rows = await bqQuery<{ semester: string }>(
+    `SELECT DISTINCT TRIM(derived_semester_title) AS semester
+     FROM ${ATTENDANCE_TABLE}
+     WHERE ${where}
+       AND institute_name = @campus
+       AND derived_semester_title IS NOT NULL
+       AND TRIM(derived_semester_title) != ''
+     ORDER BY semester`,
+    params,
+  );
+
+  return rows
+    .map((row) => row.semester)
+    .sort((left, right) =>
+      right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" }),
+    );
 }
 
 export const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -880,9 +911,10 @@ export interface RecoveryCampusData {
 export async function getCampusSubjectRecovery(
   campus: string,
   scope: SessionScope,
+  semester?: string,
 ): Promise<RecoveryCampusData> {
   const params: Record<string, unknown> = { campus };
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params, { semester });
 
   const rows = await bqQuery<{
     subject_title: string;
@@ -996,6 +1028,54 @@ export async function getCampusSubjectRecovery(
     totalSubjectsInRecovery: subjectCards.length,
     totalStudentsInRecovery: studentIds.size,
   };
+}
+
+export async function getRecoveryStudents(
+  campus: string,
+  subject: string,
+  semester: string,
+  scope: SessionScope,
+): Promise<RecoveryStudent[]> {
+  const params: Record<string, unknown> = { campus, subject };
+  const where = scopeClause(scope, params, { semester });
+  const rows = await bqQuery<{
+    student_user_id: string;
+    student_name: string;
+    batch_section_name: string | null;
+    present_count: string;
+    total_count: string;
+    subject_pct: string;
+  }>(
+    `SELECT
+       student_user_id,
+       MAX(student_name) AS student_name,
+       MAX(batch_section_name) AS batch_section_name,
+       COUNTIF(LOWER(attendance_status) = 'present') AS present_count,
+       COUNT(*) AS total_count,
+       SAFE_DIVIDE(COUNTIF(LOWER(attendance_status) = 'present'), COUNT(*)) * 100 AS subject_pct
+     FROM ${ATTENDANCE_TABLE}
+     WHERE ${where}
+       AND institute_name = @campus
+       AND subject_title = @subject
+       AND COALESCE(session_title, '') NOT IN (
+         'Coding Practice',
+         'MCQ Practice',
+         'Module Quiz'
+       )
+     GROUP BY student_user_id
+     HAVING CAST(subject_pct AS FLOAT64) < 80
+     ORDER BY subject_pct ASC, student_name`,
+    params,
+  );
+
+  return rows.map((row) => ({
+    studentId: row.student_user_id,
+    studentName: row.student_name,
+    sectionName: row.batch_section_name ?? null,
+    attendancePct: Number(row.subject_pct),
+    presentCount: Number(row.present_count),
+    totalCount: Number(row.total_count),
+  }));
 }
 
 export interface RecoveryProgressSummary {

@@ -34,8 +34,6 @@ export const LoginResponse = zod.object({
   "isActive": zod.boolean().optional(),
   "lastLoginAt": zod.string().nullish()
 })
-
-
 /**
  * @summary Logout
  */
@@ -185,6 +183,65 @@ export const FetchStudentQuizzesResponse = zod.object({
   "avgPct": zod.number()
 })
 })
+
+
+/**
+ * @summary List available recovery semesters for a campus
+ */
+export const ListRecoverySemestersQueryParams = zod.object({
+  "campus": zod.coerce.string()
+})
+
+export const ListRecoverySemestersResponseItem = zod.string()
+export const ListRecoverySemestersResponse = zod.array(ListRecoverySemestersResponseItem)
+
+
+/**
+ * @summary List subjects requiring recovery for a campus and semester
+ */
+export const ListRecoverySubjectsQueryParams = zod.object({
+  "campus": zod.coerce.string(),
+  "semester": zod.coerce.string().optional()
+})
+
+export const ListRecoverySubjectsResponse = zod.object({
+  "campus": zod.string(),
+  "subjects": zod.array(zod.object({
+  "subjectTitle": zod.string(),
+  "attendancePct": zod.number(),
+  "studentsBelow80Count": zod.number(),
+  "students": zod.array(zod.object({
+  "studentId": zod.string(),
+  "studentName": zod.string(),
+  "sectionName": zod.string().nullable(),
+  "attendancePct": zod.number(),
+  "presentCount": zod.number(),
+  "totalCount": zod.number()
+}))
+})),
+  "totalSubjectsInRecovery": zod.number(),
+  "totalStudentsInRecovery": zod.number()
+})
+
+
+/**
+ * @summary List students requiring recovery for a subject and semester
+ */
+export const ListRecoveryStudentsQueryParams = zod.object({
+  "campus": zod.coerce.string(),
+  "semester": zod.coerce.string(),
+  "subject": zod.coerce.string()
+})
+
+export const ListRecoveryStudentsResponseItem = zod.object({
+  "studentId": zod.string(),
+  "studentName": zod.string(),
+  "sectionName": zod.string().nullable(),
+  "attendancePct": zod.number(),
+  "presentCount": zod.number(),
+  "totalCount": zod.number()
+})
+export const ListRecoveryStudentsResponse = zod.array(ListRecoveryStudentsResponseItem)
 
 
 /**

@@ -215,6 +215,82 @@ paths:
               schema:
                 $ref: "#/components/schemas/StudentQuizzes"
 
+  /attendance/recovery/semesters:
+    get:
+      operationId: listRecoverySemesters
+      tags: [attendance]
+      summary: List available recovery semesters for a campus
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Available semester titles from BigQuery
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /attendance/recovery/subjects:
+    get:
+      operationId: listRecoverySubjects
+      tags: [attendance]
+      summary: List subjects requiring recovery for a campus and semester
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Campus recovery subjects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoveryCampusData"
+
+  /attendance/recovery/students:
+    get:
+      operationId: listRecoveryStudents
+      tags: [attendance]
+      summary: List students requiring recovery for a subject and semester
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: subject
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Students below the recovery threshold
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RecoveryStudent"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -652,6 +728,53 @@ paths:
 
 components:
   schemas:
+    RecoveryStudent:
+      type: object
+      required: [studentId, studentName, sectionName, attendancePct, presentCount, totalCount]
+      properties:
+        studentId:
+          type: string
+        studentName:
+          type: string
+        sectionName:
+          type: ["string", "null"]
+        attendancePct:
+          type: number
+        presentCount:
+          type: integer
+        totalCount:
+          type: integer
+
+    RecoverySubjectCard:
+      type: object
+      required: [subjectTitle, attendancePct, studentsBelow80Count, students]
+      properties:
+        subjectTitle:
+          type: string
+        attendancePct:
+          type: number
+        studentsBelow80Count:
+          type: integer
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecoveryStudent"
+
+    RecoveryCampusData:
+      type: object
+      required: [campus, subjects, totalSubjectsInRecovery, totalStudentsInRecovery]
+      properties:
+        campus:
+          type: string
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecoverySubjectCard"
+        totalSubjectsInRecovery:
+          type: integer
+        totalStudentsInRecovery:
+          type: integer
+
     HealthStatus:
       type: object
       properties:

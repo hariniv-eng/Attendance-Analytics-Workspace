@@ -41,15 +41,20 @@ import type {
   InstructorRecoveryCurriculum,
   InstructorRecoverySession,
   ListInstructorRecoverySessionsParams,
+  ListRecoverySemestersParams,
+  ListRecoveryStudentsParams,
+  ListRecoverySubjectsParams,
   ListTablesParams,
   LoginInput,
   PreviewTableParams,
   ProfileUpdate,
+  RecoveryCampusData,
   RecoveryInstructorLinkData,
   RecoveryInstructorLinkInput,
   RecoveryInstructorLinkResult,
   RecoverySessionReportInput,
   RecoverySessionReportResult,
+  RecoveryStudent,
   SearchStudentsParams,
   SessionRecord,
   StudentOverview,
@@ -810,6 +815,258 @@ export function useFetchStudentQuizzes<TData = Awaited<ReturnType<typeof fetchSt
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getFetchStudentQuizzesQueryOptions(studentId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListRecoverySemestersUrl = (params: ListRecoverySemestersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance/recovery/semesters?${stringifiedParams}` : `/api/attendance/recovery/semesters`
+}
+
+/**
+ * @summary List available recovery semesters for a campus
+ */
+export const listRecoverySemesters = async (params: ListRecoverySemestersParams, options?: RequestInit): Promise<string[]> => {
+
+  return customFetch<string[]>(getListRecoverySemestersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRecoverySemestersQueryKey = (params?: ListRecoverySemestersParams,) => {
+    return [
+    `/api/attendance/recovery/semesters`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListRecoverySemestersQueryOptions = <TData = Awaited<ReturnType<typeof listRecoverySemesters>>, TError = ErrorType<unknown>>(params: ListRecoverySemestersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecoverySemesters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRecoverySemestersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRecoverySemesters>>> = ({ signal }) => listRecoverySemesters(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRecoverySemesters>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRecoverySemestersQueryResult = NonNullable<Awaited<ReturnType<typeof listRecoverySemesters>>>
+export type ListRecoverySemestersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List available recovery semesters for a campus
+ */
+
+export function useListRecoverySemesters<TData = Awaited<ReturnType<typeof listRecoverySemesters>>, TError = ErrorType<unknown>>(
+ params: ListRecoverySemestersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecoverySemesters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRecoverySemestersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListRecoverySubjectsUrl = (params: ListRecoverySubjectsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance/recovery/subjects?${stringifiedParams}` : `/api/attendance/recovery/subjects`
+}
+
+/**
+ * @summary List subjects requiring recovery for a campus and semester
+ */
+export const listRecoverySubjects = async (params: ListRecoverySubjectsParams, options?: RequestInit): Promise<RecoveryCampusData> => {
+
+  return customFetch<RecoveryCampusData>(getListRecoverySubjectsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRecoverySubjectsQueryKey = (params?: ListRecoverySubjectsParams,) => {
+    return [
+    `/api/attendance/recovery/subjects`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListRecoverySubjectsQueryOptions = <TData = Awaited<ReturnType<typeof listRecoverySubjects>>, TError = ErrorType<unknown>>(params: ListRecoverySubjectsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecoverySubjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRecoverySubjectsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRecoverySubjects>>> = ({ signal }) => listRecoverySubjects(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRecoverySubjects>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRecoverySubjectsQueryResult = NonNullable<Awaited<ReturnType<typeof listRecoverySubjects>>>
+export type ListRecoverySubjectsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List subjects requiring recovery for a campus and semester
+ */
+
+export function useListRecoverySubjects<TData = Awaited<ReturnType<typeof listRecoverySubjects>>, TError = ErrorType<unknown>>(
+ params: ListRecoverySubjectsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecoverySubjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRecoverySubjectsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListRecoveryStudentsUrl = (params: ListRecoveryStudentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance/recovery/students?${stringifiedParams}` : `/api/attendance/recovery/students`
+}
+
+/**
+ * @summary List students requiring recovery for a subject and semester
+ */
+export const listRecoveryStudents = async (params: ListRecoveryStudentsParams, options?: RequestInit): Promise<RecoveryStudent[]> => {
+
+  return customFetch<RecoveryStudent[]>(getListRecoveryStudentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRecoveryStudentsQueryKey = (params?: ListRecoveryStudentsParams,) => {
+    return [
+    `/api/attendance/recovery/students`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListRecoveryStudentsQueryOptions = <TData = Awaited<ReturnType<typeof listRecoveryStudents>>, TError = ErrorType<unknown>>(params: ListRecoveryStudentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecoveryStudents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRecoveryStudentsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRecoveryStudents>>> = ({ signal }) => listRecoveryStudents(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRecoveryStudents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRecoveryStudentsQueryResult = NonNullable<Awaited<ReturnType<typeof listRecoveryStudents>>>
+export type ListRecoveryStudentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List students requiring recovery for a subject and semester
+ */
+
+export function useListRecoveryStudents<TData = Awaited<ReturnType<typeof listRecoveryStudents>>, TError = ErrorType<unknown>>(
+ params: ListRecoveryStudentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRecoveryStudents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRecoveryStudentsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

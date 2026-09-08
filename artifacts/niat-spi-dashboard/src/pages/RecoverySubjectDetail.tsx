@@ -167,6 +167,14 @@ export default function RecoverySubjectDetail() {
 
   const campus = useMemo(() => safeDecode(rawCampus), [rawCampus]);
   const subject = useMemo(() => safeDecode(rawSubject), [rawSubject]);
+  const semester = useMemo(
+    () => new URLSearchParams(window.location.search).get("semester") ?? "",
+    [],
+  );
+  const semester = useMemo(
+    () => new URLSearchParams(window.location.search).get("semester") ?? "",
+    [],
+  );
 
   const [recoveryData, setRecoveryData] = useState<RecoveryCampusData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -194,14 +202,36 @@ export default function RecoverySubjectDetail() {
       setLoading(true);
       setError("");
       try {
-        const response = await fetch(
-          `/api/attendance/recovery/subjects?campus=${encodeURIComponent(campus!)}`,
-          { signal: controller.signal }
-        );
-        if (!response.ok) {
+        const subjectParams = new URLSearchParams({ campus: campus! });
+        if (semester) subjectParams.set("semester", semester);
+        const requests: Promise<Response>[] = [
+          fetch(`/api/attendance/recovery/subjects?${subjectParams}`, {
+            signal: controller.signal,
+          }),
+        ];
+        if (semester && subject) {
+          requests.push(
+            fetch(
+              `/api/attendance/recovery/students?${new URLSearchParams({
+                campus: campus!,
+                semester,
+                subject,
+              })}`,
+              { signal: controller.signal },
+            ),
+          );
+        }
+        const [response, studentsResponse] = await Promise.all(requests);
+        if (!response.ok || (studentsResponse && !studentsResponse.ok)) {
           throw new Error("Failed to fetch recovery data");
         }
-        const data = await response.json();
+        const data = (await response.json()) as RecoveryCampusData;
+        if (studentsResponse && subject) {
+          const students = (await studentsResponse.json()) as RecoveryStudent[];
+          data.subjects = data.subjects.map((item) =>
+            item.subjectTitle === subject ? { ...item, students } : item,
+          );
+        }
         if (active && !controller.signal.aborted) setRecoveryData(data);
       } catch (err) {
         if (!active || (err instanceof DOMException && err.name === "AbortError")) return;
@@ -218,7 +248,7 @@ export default function RecoverySubjectDetail() {
       active = false;
       controller.abort();
     };
-  }, [campus, toast]);
+  }, [campus, semester, subject, toast]);
 
   const selectedSubjectData = useMemo(() => {
     if (!recoveryData || !subject) return null;
@@ -405,7 +435,7 @@ export default function RecoverySubjectDetail() {
         </Button>
         <PageHeader
           title={selectedSubjectData.subjectTitle}
-          subtitle={`Campus: ${campus}`}
+          subtitle={`Campus: ${campus}${semester ? ` · ${semester}` : ""}`}
           right={
             <div className="flex items-center gap-3">
               <span className={`rounded-full px-3 py-1 text-sm font-semibold bg-white border ${pctTextColor(selectedSubjectData.attendancePct)}`}>
@@ -668,6 +698,10 @@ export default function RecoverySubjectDetail() {
 
   const campus = useMemo(() => safeDecode(rawCampus), [rawCampus]);
   const subject = useMemo(() => safeDecode(rawSubject), [rawSubject]);
+  const semester = useMemo(
+    () => new URLSearchParams(window.location.search).get("semester") ?? "",
+    [],
+  );
 
   const [recoveryData, setRecoveryData] = useState<RecoveryCampusData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -695,14 +729,36 @@ export default function RecoverySubjectDetail() {
       setLoading(true);
       setError("");
       try {
-        const response = await fetch(
-          `/api/attendance/recovery/subjects?campus=${encodeURIComponent(campus!)}`,
-          { signal: controller.signal }
-        );
-        if (!response.ok) {
+        const subjectParams = new URLSearchParams({ campus: campus! });
+        if (semester) subjectParams.set("semester", semester);
+        const requests: Promise<Response>[] = [
+          fetch(`/api/attendance/recovery/subjects?${subjectParams}`, {
+            signal: controller.signal,
+          }),
+        ];
+        if (semester && subject) {
+          requests.push(
+            fetch(
+              `/api/attendance/recovery/students?${new URLSearchParams({
+                campus: campus!,
+                semester,
+                subject,
+              })}`,
+              { signal: controller.signal },
+            ),
+          );
+        }
+        const [response, studentsResponse] = await Promise.all(requests);
+        if (!response.ok || (studentsResponse && !studentsResponse.ok)) {
           throw new Error("Failed to fetch recovery data");
         }
-        const data = await response.json();
+        const data = (await response.json()) as RecoveryCampusData;
+        if (studentsResponse && subject) {
+          const students = (await studentsResponse.json()) as RecoveryStudent[];
+          data.subjects = data.subjects.map((item) =>
+            item.subjectTitle === subject ? { ...item, students } : item,
+          );
+        }
         if (active && !controller.signal.aborted) setRecoveryData(data);
       } catch (err) {
         if (!active || (err instanceof DOMException && err.name === "AbortError")) return;
@@ -719,7 +775,7 @@ export default function RecoverySubjectDetail() {
       active = false;
       controller.abort();
     };
-  }, [campus, toast]);
+  }, [campus, semester, subject, toast]);
 
   const selectedSubjectData = useMemo(() => {
     if (!recoveryData || !subject) return null;
@@ -955,7 +1011,7 @@ export default function RecoverySubjectDetail() {
         </Button>
         <PageHeader
           title={selectedSubjectData.subjectTitle}
-          subtitle={`Campus: ${campus}`}
+          subtitle={`Campus: ${campus}${semester ? ` · ${semester}` : ""}`}
           right={
             <div className="flex items-center gap-3">
               <span className={`rounded-full px-3 py-1 text-sm font-semibold bg-white border ${pctTextColor(selectedSubjectData.attendancePct)}`}>

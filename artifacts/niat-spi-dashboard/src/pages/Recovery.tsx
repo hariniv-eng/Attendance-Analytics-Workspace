@@ -46,6 +46,9 @@ export default function Recovery() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [selectedCampus, setSelectedCampus] = useState("");
+  const [semesters, setSemesters] = useState<string[]>([]);
+  const [selectedSemester, setSelectedSemester] = useState("");
+  const [semestersLoading, setSemestersLoading] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [recoveryData, setRecoveryData] = useState<RecoveryCampusData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -55,7 +58,43 @@ export default function Recovery() {
     useGetDashboardFilters({});
 
   useEffect(() => {
-    if (!selectedCampus) {
+    setSelectedSemester("");
+    setSemesters([]);
+    setRecoveryData(null);
+    if (!selectedCampus) return;
+
+    const controller = new AbortController();
+    let active = true;
+    async function fetchSemesters() {
+      setSemestersLoading(true);
+      setError("");
+      try {
+        const response = await fetch(
+          `/api/attendance/recovery/semesters?campus=${encodeURIComponent(selectedCampus)}`,
+          { signal: controller.signal },
+        );
+        if (!response.ok) throw new Error("Failed to fetch semesters");
+        const data = (await response.json()) as string[];
+        if (active) {
+          setSemesters(data);
+          setSelectedSemester(data[0] ?? "");
+        }
+      } catch (err) {
+        if (!active || (err instanceof DOMException && err.name === "AbortError")) return;
+        setError(err instanceof Error ? err.message : "Failed to fetch semesters");
+      } finally {
+        if (active) setSemestersLoading(false);
+      }
+    }
+    fetchSemesters();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [selectedCampus, retryCount]);
+
+  useEffect(() => {
+    if (!selectedCampus || !selectedSemester) {
       setRecoveryData(null);
       return;
     }
@@ -69,7 +108,7 @@ export default function Recovery() {
       setError("");
       try {
         const response = await fetch(
-          `/api/attendance/recovery/subjects?campus=${encodeURIComponent(selectedCampus)}`,
+          `/api/attendance/recovery/subjects?campus=${encodeURIComponent(selectedCampus)}&semester=${encodeURIComponent(selectedSemester)}`,
           { signal: controller.signal }
         );
         if (!response.ok) {
@@ -92,7 +131,7 @@ export default function Recovery() {
       active = false;
       controller.abort();
     };
-  }, [selectedCampus, retryCount, toast]);
+  }, [selectedCampus, selectedSemester, retryCount, toast]);
 
   if (filtersLoading) {
     return <PageLoader />;
@@ -108,7 +147,7 @@ export default function Recovery() {
         subtitle="Campus subject recovery based on subject-level attendance below 80%"
       />
 
-      <div className="flex items-end gap-4">
+      <div className="flex flex-wrap items-end gap-4">
         <div className="flex-1 max-w-sm">
           <label id="campus-select-label" className="mb-2 block text-sm font-medium text-slate-700">
             Select Campus
@@ -121,6 +160,27 @@ export default function Recovery() {
               {campusOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex-1 max-w-sm">
+          <label id="semester-select-label" className="mb-2 block text-sm font-medium text-slate-700">
+            Select Semester
+          </label>
+          <Select
+            value={selectedSemester}
+            onValueChange={setSelectedSemester}
+            disabled={!selectedCampus || semestersLoading || semesters.length === 0}
+          >
+            <SelectTrigger aria-labelledby="semester-select-label" className="bg-white">
+              <SelectValue placeholder={semestersLoading ? "Loading semesters..." : "Choose a semester..."} />
+            </SelectTrigger>
+            <SelectContent>
+              {semesters.map((semester) => (
+                <SelectItem key={semester} value={semester}>
+                  {semester}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -146,7 +206,14 @@ export default function Recovery() {
         </div>
       )}
 
-      {selectedCampus && !loading && recoveryData && (
+      {selectedCampus && !semestersLoading && semesters.length === 0 && !error && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-12 text-center">
+          <AlertCircle className="mx-auto mb-4 h-12 w-12 text-slate-400" />
+          <p className="text-slate-600 font-medium">No semesters are available for this campus</p>
+        </div>
+      )}
+
+      {selectedCampus && selectedSemester && !loading && recoveryData && (
         <div className="flex flex-col gap-8 animate-in slide-in-from-bottom-2 duration-500">
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -185,7 +252,7 @@ export default function Recovery() {
                   <button
                     key={subject.subjectTitle}
                     type="button"
-                    onClick={() => setLocation(`/dashboard/recovery/${encodeURIComponent(selectedCampus)}/${encodeURIComponent(subject.subjectTitle)}`)}
+                    onClick={() => setLocation(`/dashboard/recovery/${encodeURIComponent(selectedCampus)}/${encodeURIComponent(subject.subjectTitle)}?semester=${encodeURIComponent(selectedSemester)}`)}
                     className="group flex flex-col rounded-xl border border-slate-200 bg-white p-5 text-left transition-all hover:border-brand-300 hover:shadow-md hover:ring-1 hover:ring-brand-500/20"
                   >
                     <div className="flex w-full items-start justify-between gap-4">

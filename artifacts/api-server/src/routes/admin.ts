@@ -1,13 +1,12 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import { db } from "@workspace/db";
 import {
-  db,
   usersTable,
   campusesTable,
   recoverySessionsTable,
 } from "@workspace/db";
-import { UpdateRecoveryInstructorLinkBody } from "@workspace/api-zod";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { requireSession } from "../lib/auth.js";
 import { invalidateSessionCache } from "../lib/sessionCache.js";
 import { manageableRoles, ROLE_META, SUBJECTS } from "../lib/rbac.js";
@@ -25,7 +24,7 @@ router.use((_req, res, next) => {
 });
 
 // Users
-router.get("/users", async (_req, res): Promise<void> => {
+router.get("/users", async (req, res): Promise<void> => {
   const users = await db
     .select()
     .from(usersTable)
@@ -199,122 +198,6 @@ router.delete("/users/:id", async (req, res): Promise<void> => {
   res.status(204).send();
 });
 
-router.get(
-  "/recovery-instructor-links",
-  async (_req, res): Promise<void> => {
-    const [sessions, instructorUsers] = await Promise.all([
-      db
-        .select({
-          instructorName: recoverySessionsTable.instructorName,
-          instructorId: recoverySessionsTable.instructorId,
-        })
-        .from(recoverySessionsTable)
-        .orderBy(recoverySessionsTable.instructorName),
-      db
-        .select({
-          id: usersTable.id,
-          name: usersTable.name,
-          role: usersTable.role,
-          isActive: usersTable.isActive,
-        })
-        .from(usersTable)
-        .where(
-          and(
-            eq(usersTable.role, "instructor"),
-            eq(usersTable.isActive, true),
-          ),
-        )
-        .orderBy(usersTable.name),
-    ]);
-
-    const groups = new Map<
-      string,
-      { count: number; instructorId: string | null }
-    >();
-    for (const item of sessions) {
-      const instructorName = item.instructorName.trim();
-      if (!instructorName) continue;
-      const current = groups.get(instructorName) ?? {
-        count: 0,
-        instructorId: null,
-      };
-      current.count += 1;
-      if (current.instructorId === null && item.instructorId !== null) {
-        current.instructorId = item.instructorId;
-      }
-      groups.set(instructorName, current);
-    }
-
-    res.json({
-      instructors: [...groups.entries()].map(
-        ([instructorName, { count, instructorId }]) => ({
-          instructorName,
-          count,
-          instructorId,
-        }),
-      ),
-      users: instructorUsers,
-    });
-  },
-);
-
-router.put(
-  "/recovery-instructor-links",
-  async (req, res): Promise<void> => {
-    const parsed = UpdateRecoveryInstructorLinkBody.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        error: parsed.error.issues[0]?.message ?? "Invalid instructor link",
-      });
-      return;
-    }
-
-    const instructorName = parsed.data.instructorName.trim();
-    const instructorId = parsed.data.userId;
-    if (!instructorName) {
-      res.status(400).json({ error: "instructorName is required" });
-      return;
-    }
-
-    if (instructorId !== null) {
-      const instructor = await db
-        .select({
-          role: usersTable.role,
-          isActive: usersTable.isActive,
-        })
-        .from(usersTable)
-        .where(eq(usersTable.id, instructorId))
-        .limit(1);
-      if (
-        !instructor[0] ||
-        instructor[0].role !== "instructor" ||
-        !instructor[0].isActive
-      ) {
-        res
-          .status(400)
-          .json({ error: "Select an active instructor account" });
-        return;
-      }
-    }
-
-    const updated = await db
-      .update(recoverySessionsTable)
-      .set({
-        instructorId,
-        updatedAt: new Date(),
-      })
-      .where(eq(recoverySessionsTable.instructorName, instructorName))
-      .returning({ id: recoverySessionsTable.id });
-
-    cacheDeletePrefix("session-tracker:");
-    res.json({
-      instructorName,
-      linkedCount: updated.length,
-      instructorId,
-    });
-  },
-);
-
 // Campuses
 router.get("/campuses", async (_req, res) => {
   const campuses = await db
@@ -345,12 +228,14 @@ router.post("/campuses", async (req, res): Promise<void> => {
     .values({ name, instituteId })
     .returning();
   const c = inserted[0]!;
-  res.status(201).json({
-    id: c.id,
-    name: c.name,
-    instituteId: c.instituteId,
-    createdAt: c.createdAt.toISOString(),
-  });
+  res
+    .status(201)
+    .json({
+      id: c.id,
+      name: c.name,
+      instituteId: c.instituteId,
+      createdAt: c.createdAt.toISOString(),
+    });
 });
 
 router.patch("/campuses/:id", async (req, res): Promise<void> => {

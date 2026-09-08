@@ -393,11 +393,9 @@ export async function getStudentsList(
       SELECT
         user_id,
         AVG(IF(UPPER(derived_unit_type) LIKE '%MODULE%', NULL,
-          IF(SAFE_CAST(total_completed_quizzes AS INT64) > 0,
-             SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), NULL))) AS classroom_avg,
+          IFNULL(SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), 0))) AS classroom_avg,
         AVG(IF(UPPER(derived_unit_type) LIKE '%MODULE%',
-          IF(SAFE_CAST(total_completed_quizzes AS INT64) > 0,
-             SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), NULL), NULL)) AS module_avg
+          IFNULL(SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), 0), NULL)) AS module_avg
       FROM ${QUIZ_TABLE}
       GROUP BY user_id
     )
@@ -1592,15 +1590,11 @@ export async function getStudentQuizzes(
   const calcSummary = (items: QuizItem[]): QuizSummary => {
     const attempted = items.reduce((s, q) => s + q.score, 0);
     const total = items.reduce((s, q) => s + q.maxScore, 0);
-    // Average over quizzes the student actually attempted (score > 0),
-    // including legitimate 0% scores; unattempted (Pending) rows are excluded.
-    const attemptedItems = items.filter((q) => q.score > 0);
+    // Average all course rows. Unattempted (Pending) courses count as 0% (Ab).
     const avgPct =
-      attemptedItems.length > 0
+      items.length > 0
         ? Math.round(
-            (attemptedItems.reduce((s, q) => s + q.percentage, 0) /
-              attemptedItems.length) *
-              10,
+            (items.reduce((s, q) => s + q.percentage, 0) / items.length) * 10,
           ) / 10
         : 0;
     return { attempted, total, avgPct };

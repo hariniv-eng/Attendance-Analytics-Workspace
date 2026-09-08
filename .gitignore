@@ -52,3 +52,7 @@ Thumbs.db
 attached_assets/*.json
 attached_assets/Pasted-MONGODB-URI-*
 attached_assets/Pasted--type-service-account-*
+
+# Local environment
+.env
+.env.local

@@ -280,6 +280,18 @@ paths:
           description: "all | below50 | below80 | above80"
           schema:
             type: string
+        - name: dateFrom
+          in: query
+          description: Inclusive start date (YYYY-MM-DD) for attendance stats. Empty means start of current semester.
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          description: Inclusive end date (YYYY-MM-DD) for attendance stats. Empty means today / end of semester.
+          schema:
+            type: string
+            format: date
       responses:
         "200":
           description: Student list

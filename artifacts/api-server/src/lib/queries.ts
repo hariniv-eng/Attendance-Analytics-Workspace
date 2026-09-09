@@ -54,6 +54,54 @@ function scopeClause(
   return clauses.join(" AND ");
 }
 
+export const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export interface DateRangeFilter {
+  from?: string;
+  to?: string;
+}
+
+/** Parse `dateFrom` / `dateTo` query params. Invalid values are dropped. */
+export function parseDateRange(
+  q: Record<string, string | undefined>,
+): DateRangeFilter | undefined {
+  let from = q["dateFrom"]?.trim() || undefined;
+  let to = q["dateTo"]?.trim() || undefined;
+  if (from && !ISO_DATE_RE.test(from)) from = undefined;
+  if (to && !ISO_DATE_RE.test(to)) to = undefined;
+  if (from && to && from > to) {
+    const swap = from;
+    from = to;
+    to = swap;
+  }
+  if (!from && !to) return undefined;
+  return { from, to };
+}
+
+export function dateRangeCacheKey(
+  range: DateRangeFilter | undefined,
+): string {
+  if (!range) return "";
+  return `${range.from ?? ""}:${range.to ?? ""}`;
+}
+
+function dateRangeClause(
+  range: DateRangeFilter | undefined,
+  params: Record<string, unknown>,
+): string {
+  if (!range) return "";
+  const parts: string[] = [];
+  if (range.from) {
+    params["dateFrom"] = range.from;
+    parts.push("DATE(date) >= DATE(@dateFrom)");
+  }
+  if (range.to) {
+    params["dateTo"] = range.to;
+    parts.push("DATE(date) <= DATE(@dateTo)");
+  }
+  return parts.length > 0 ? ` AND ${parts.join(" AND ")}` : "";
+}
+
 export interface StudentOverview {
   studentId: string;
   studentName: string;
@@ -339,10 +387,11 @@ export async function getStudentsList(
     section?: string;
     subject?: string;
     attendanceBand?: string;
+    dateRange?: DateRangeFilter;
   } = {},
 ): Promise<StudentSearchResult[]> {
   const params: Record<string, unknown> = {};
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params) + dateRangeClause(opts.dateRange, params);
   const safeLimit = Math.min(opts.limit ?? 1000, 5000);
   let searchFilter = "";
   if (opts.search) {
@@ -459,9 +508,10 @@ export interface SectionSummaryItem {
 
 export async function getCampusSummary(
   scope: SessionScope,
+  opts: { dateRange?: DateRangeFilter } = {},
 ): Promise<CampusSummaryItem[]> {
   const params: Record<string, unknown> = {};
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params) + dateRangeClause(opts.dateRange, params);
   const rows = await bqQuery<{
     institute_name: string;
     student_count: string;
@@ -546,10 +596,10 @@ export interface SubjectSummaryItem {
 
 export async function getSubjectSummary(
   scope: SessionScope,
-  opts: { campus?: string } = {},
+  opts: { campus?: string; dateRange?: DateRangeFilter } = {},
 ): Promise<SubjectSummaryItem[]> {
   const params: Record<string, unknown> = {};
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params) + dateRangeClause(opts.dateRange, params);
   let campusFilter = "";
   if (opts.campus) {
     params["filterCampus"] = opts.campus;
@@ -601,10 +651,15 @@ export interface SessionSummaryItem {
  */
 export async function getSubjectSessions(
   scope: SessionScope,
-  opts: { subject: string; campus?: string; section?: string },
+  opts: {
+    subject: string;
+    campus?: string;
+    section?: string;
+    dateRange?: DateRangeFilter;
+  },
 ): Promise<SessionSummaryItem[]> {
   const params: Record<string, unknown> = { subject: opts.subject };
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params) + dateRangeClause(opts.dateRange, params);
   let extra = " AND subject_title = @subject";
   if (opts.campus) {
     params["campus"] = opts.campus;
@@ -665,10 +720,10 @@ export interface CampusSessionRow {
  */
 export async function getCampusSessions(
   scope: SessionScope,
-  opts: { campus: string; section?: string },
+  opts: { campus: string; section?: string; dateRange?: DateRangeFilter },
 ): Promise<CampusSessionRow[]> {
   const params: Record<string, unknown> = { campus: opts.campus };
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params) + dateRangeClause(opts.dateRange, params);
   let extra = " AND institute_name = @campus";
   if (opts.section) {
     params["section"] = opts.section;

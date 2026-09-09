@@ -45,7 +45,7 @@ const QUIZ_TABLE =
  * curriculum lists. It has no subject column of its own, so callers join it
  * to ATTENDANCE_TABLE on session_section_id to recover subject_title.
  */
-const PROD_SEQUENCE_TABLE =
+const INSTITUTE_SCHEDULE_TABLE =
   "`kossip-helpers.niat_post_onboarding_engagement_ai_analytics_workspace.z_niat_institute_wise_daily_scheduled_session_details`";
 
 function scopeClause(
@@ -1509,7 +1509,7 @@ export async function getProdSequence(
       sched.session_name AS topic_title,
       MIN(sched.session_date) AS first_date,
       MAX(IF(sched.session_status = 'COMPLETED', 1, 0)) AS delivered
-    FROM ${PROD_SEQUENCE_TABLE} sched
+    FROM ${INSTITUTE_SCHEDULE_TABLE} sched
     JOIN ${ATTENDANCE_TABLE} att
       ON sched.session_section_id = att.session_section_id
     WHERE sched.institute_name = @campus
@@ -1538,7 +1538,7 @@ export async function getDeliveredTopicTitles(
 ): Promise<Set<string>> {
   const rows = await bqQuery<{ session_name: string }>(
     `SELECT DISTINCT sched.session_name AS session_name
-     FROM ${PROD_SEQUENCE_TABLE} sched
+     FROM ${INSTITUTE_SCHEDULE_TABLE} sched
      JOIN ${ATTENDANCE_TABLE} att
        ON sched.session_section_id = att.session_section_id
      WHERE sched.institute_name = @campus

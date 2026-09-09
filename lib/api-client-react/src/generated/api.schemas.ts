@@ -44,6 +44,38 @@ export interface RecoveryCampusData {
   totalStudentsInRecovery: number;
 }
 
+export interface QuizRecoveryStudent {
+  studentId: string;
+  studentName: string;
+  /** @nullable */
+  sectionName: string | null;
+  attendancePct: number;
+  presentCount: number;
+  totalCount: number;
+  /** @nullable */
+  classroomAvg: number | null;
+  classroomCompleted: number;
+  classroomTotal: number;
+  /** @nullable */
+  moduleAvg: number | null;
+  moduleCompleted: number;
+  moduleTotal: number;
+  spiPath: string;
+}
+
+export interface QuizRecoverySubjectCard {
+  subjectTitle: string;
+  studentsNotAt100Count: number;
+  students: QuizRecoveryStudent[];
+}
+
+export interface QuizRecoveryCampusData {
+  campus: string;
+  subjects: QuizRecoverySubjectCard[];
+  totalSubjectsInRecovery: number;
+  totalStudentsInRecovery: number;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -413,6 +445,17 @@ semester?: string;
 };
 
 export type ListRecoveryStudentsParams = {
+campus: string;
+semester: string;
+subject: string;
+};
+
+export type ListQuizRecoverySubjectsParams = {
+campus: string;
+semester?: string;
+};
+
+export type ListQuizRecoveryStudentsParams = {
 campus: string;
 semester: string;
 subject: string;

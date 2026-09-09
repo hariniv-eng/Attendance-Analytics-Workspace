@@ -291,6 +291,61 @@ paths:
                 items:
                   $ref: "#/components/schemas/RecoveryStudent"
 
+  /attendance/recovery/quiz-subjects:
+    get:
+      operationId: listQuizRecoverySubjects
+      tags: [attendance]
+      summary: List subjects whose students attend ≥80% but are not at 100% on C.Q or M.Q
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Campus quiz recovery subjects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizRecoveryCampusData"
+
+  /attendance/recovery/quiz-students:
+    get:
+      operationId: listQuizRecoveryStudents
+      tags: [attendance]
+      summary: List students at ≥80% attendance who are not at 100% on C.Q or M.Q
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: subject
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Students needing C.Q / M.Q follow-up
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuizRecoveryStudent"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -825,6 +880,78 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecoverySubjectCard"
+        totalSubjectsInRecovery:
+          type: integer
+        totalStudentsInRecovery:
+          type: integer
+
+    QuizRecoveryStudent:
+      type: object
+      required:
+        - studentId
+        - studentName
+        - sectionName
+        - attendancePct
+        - presentCount
+        - totalCount
+        - classroomAvg
+        - classroomCompleted
+        - classroomTotal
+        - moduleAvg
+        - moduleCompleted
+        - moduleTotal
+        - spiPath
+      properties:
+        studentId:
+          type: string
+        studentName:
+          type: string
+        sectionName:
+          type: ["string", "null"]
+        attendancePct:
+          type: number
+        presentCount:
+          type: integer
+        totalCount:
+          type: integer
+        classroomAvg:
+          type: ["number", "null"]
+        classroomCompleted:
+          type: integer
+        classroomTotal:
+          type: integer
+        moduleAvg:
+          type: ["number", "null"]
+        moduleCompleted:
+          type: integer
+        moduleTotal:
+          type: integer
+        spiPath:
+          type: string
+
+    QuizRecoverySubjectCard:
+      type: object
+      required: [subjectTitle, studentsNotAt100Count, students]
+      properties:
+        subjectTitle:
+          type: string
+        studentsNotAt100Count:
+          type: integer
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizRecoveryStudent"
+
+    QuizRecoveryCampusData:
+      type: object
+      required: [campus, subjects, totalSubjectsInRecovery, totalStudentsInRecovery]
+      properties:
+        campus:
+          type: string
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizRecoverySubjectCard"
         totalSubjectsInRecovery:
           type: integer
         totalStudentsInRecovery:

@@ -42,6 +42,8 @@ import type {
   InstructorRecoveryCurriculum,
   InstructorRecoverySession,
   ListInstructorRecoverySessionsParams,
+  ListQuizRecoveryStudentsParams,
+  ListQuizRecoverySubjectsParams,
   ListRecoverySemestersParams,
   ListRecoveryStudentsParams,
   ListRecoverySubjectsParams,
@@ -49,6 +51,8 @@ import type {
   LoginInput,
   PreviewTableParams,
   ProfileUpdate,
+  QuizRecoveryCampusData,
+  QuizRecoveryStudent,
   RecoveryCampusData,
   RecoveryInstructorLinkData,
   RecoveryInstructorLinkInput,
@@ -1069,6 +1073,172 @@ export function useListRecoveryStudents<TData = Awaited<ReturnType<typeof listRe
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListRecoveryStudentsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListQuizRecoverySubjectsUrl = (params: ListQuizRecoverySubjectsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance/recovery/quiz-subjects?${stringifiedParams}` : `/api/attendance/recovery/quiz-subjects`
+}
+
+/**
+ * @summary List subjects whose students attend ≥80% but are not at 100% on C.Q or M.Q
+ */
+export const listQuizRecoverySubjects = async (params: ListQuizRecoverySubjectsParams, options?: RequestInit): Promise<QuizRecoveryCampusData> => {
+
+  return customFetch<QuizRecoveryCampusData>(getListQuizRecoverySubjectsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListQuizRecoverySubjectsQueryKey = (params?: ListQuizRecoverySubjectsParams,) => {
+    return [
+    `/api/attendance/recovery/quiz-subjects`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListQuizRecoverySubjectsQueryOptions = <TData = Awaited<ReturnType<typeof listQuizRecoverySubjects>>, TError = ErrorType<unknown>>(params: ListQuizRecoverySubjectsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listQuizRecoverySubjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListQuizRecoverySubjectsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listQuizRecoverySubjects>>> = ({ signal }) => listQuizRecoverySubjects(params, { signal, ...requestOptions });
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listQuizRecoverySubjects>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListQuizRecoverySubjectsQueryResult = NonNullable<Awaited<ReturnType<typeof listQuizRecoverySubjects>>>
+export type ListQuizRecoverySubjectsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List subjects whose students attend ≥80% but are not at 100% on C.Q or M.Q
+ */
+
+export function useListQuizRecoverySubjects<TData = Awaited<ReturnType<typeof listQuizRecoverySubjects>>, TError = ErrorType<unknown>>(
+ params: ListQuizRecoverySubjectsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listQuizRecoverySubjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListQuizRecoverySubjectsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListQuizRecoveryStudentsUrl = (params: ListQuizRecoveryStudentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/attendance/recovery/quiz-students?${stringifiedParams}` : `/api/attendance/recovery/quiz-students`
+}
+
+/**
+ * @summary List students at ≥80% attendance who are not at 100% on C.Q or M.Q
+ */
+export const listQuizRecoveryStudents = async (params: ListQuizRecoveryStudentsParams, options?: RequestInit): Promise<QuizRecoveryStudent[]> => {
+
+  return customFetch<QuizRecoveryStudent[]>(getListQuizRecoveryStudentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListQuizRecoveryStudentsQueryKey = (params?: ListQuizRecoveryStudentsParams,) => {
+    return [
+    `/api/attendance/recovery/quiz-students`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListQuizRecoveryStudentsQueryOptions = <TData = Awaited<ReturnType<typeof listQuizRecoveryStudents>>, TError = ErrorType<unknown>>(params: ListQuizRecoveryStudentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listQuizRecoveryStudents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListQuizRecoveryStudentsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listQuizRecoveryStudents>>> = ({ signal }) => listQuizRecoveryStudents(params, { signal, ...requestOptions });
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listQuizRecoveryStudents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListQuizRecoveryStudentsQueryResult = NonNullable<Awaited<ReturnType<typeof listQuizRecoveryStudents>>>
+export type ListQuizRecoveryStudentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List students at ≥80% attendance who are not at 100% on C.Q or M.Q
+ */
+
+export function useListQuizRecoveryStudents<TData = Awaited<ReturnType<typeof listQuizRecoveryStudents>>, TError = ErrorType<unknown>>(
+ params: ListQuizRecoveryStudentsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listQuizRecoveryStudents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListQuizRecoveryStudentsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

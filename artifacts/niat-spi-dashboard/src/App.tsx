@@ -30,6 +30,9 @@ const Recovery = lazy(() => import("@/pages/Recovery"));
 const RecoverySubjectDetail = lazy(
   () => import("@/pages/RecoverySubjectDetail"),
 );
+const RecoveryQuizSubjectDetail = lazy(
+  () => import("@/pages/RecoveryQuizSubjectDetail"),
+);
 const InstructorRecovery = lazy(() => import("@/pages/InstructorRecovery"));
 const AdminRecoveryInstructors = lazy(
   () => import("@/pages/AdminRecoveryInstructors"),
@@ -109,7 +112,12 @@ function Router() {
             <Campuses />
           </Protected>
         </Route>
-        <Route path="/dashboard/recovery">
+        <Route path="/dashboard/recovery/quiz/:campus/:subject">
+          <Protected>
+            <RecoveryQuizSubjectDetail />
+          </Protected>
+        </Route>
+        <Route path="/dashboard/recovery/quiz">
           <Protected>
             <Recovery />
           </Protected>
@@ -117,6 +125,11 @@ function Router() {
         <Route path="/dashboard/recovery/:campus/:subject">
           <Protected>
             <RecoverySubjectDetail />
+          </Protected>
+        </Route>
+        <Route path="/dashboard/recovery">
+          <Protected>
+            <Recovery />
           </Protected>
         </Route>
         <Route path="/dashboard/profile">

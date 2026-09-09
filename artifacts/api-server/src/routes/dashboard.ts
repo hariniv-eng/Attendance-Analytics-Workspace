@@ -10,10 +10,13 @@ import {
   getSubjectSessions,
   getSessionStudents,
   getCampusSessions,
+  getSubjectProdSequence,
   getRecoveryProgress,
   getResolvedRecoverySessionTitles,
   getSessionTracker,
   getDeliveredTopicTitles,
+  parseDateRange,
+  dateRangeCacheKey,
 } from "../lib/queries.js";
 import { REQUIRED_PCT } from "../lib/rbac.js";
 import { cacheGet, cacheSet } from "../lib/cache.js";
@@ -121,15 +124,17 @@ router.get("/subjects", requireSession(), async (req, res): Promise<void> => {
     campuses: session.campuses,
     subjects: session.subjects,
   });
-  const campus = (req.query["campus"] as string | undefined) || undefined;
-  const cacheKey = `subjects:${session.role}:${JSON.stringify(scope)}:${campus ?? ""}`;
+  const q = req.query as Record<string, string | undefined>;
+  const campus = q["campus"] || undefined;
+  const dateRange = parseDateRange(q);
+  const cacheKey = `subjects:${session.role}:${JSON.stringify(scope)}:${campus ?? ""}:${dateRangeCacheKey(dateRange)}`;
   const cached = cacheGet<object>(cacheKey);
   if (cached) {
     res.json(cached);
     return;
   }
   try {
-    const subjects = await getSubjectSummary(scope, { campus });
+    const subjects = await getSubjectSummary(scope, { campus, dateRange });
     cacheSet(cacheKey, subjects, 60 * 1000);
     res.json(subjects);
   } catch (err) {
@@ -137,6 +142,50 @@ router.get("/subjects", requireSession(), async (req, res): Promise<void> => {
     res.status(500).json({ error: "Failed to fetch subject attendance" });
   }
 });
+
+router.get(
+  "/prod-sequence",
+  requireSession(),
+  async (req, res): Promise<void> => {
+    const session = req.session!;
+    const scope = scopeForSession({
+      role: session.role as Role,
+      campuses: session.campuses,
+      subjects: session.subjects,
+    });
+    const query = req.query as Record<string, string | undefined>;
+    const campus = query["campus"];
+    const subject = query["subject"];
+    const semester = query["semester"] || undefined;
+    if (!campus || !subject) {
+      res.status(400).json({ error: "campus and subject required" });
+      return;
+    }
+    if (scope.campuses?.length && !scope.campuses.includes(campus)) {
+      res.status(403).json({ error: "Not permitted for this campus" });
+      return;
+    }
+    if (scope.subjects?.length && !scope.subjects.includes(subject)) {
+      res.status(403).json({ error: "Not permitted for this subject" });
+      return;
+    }
+
+    const cacheKey = `prod-sequence:${session.role}:${JSON.stringify(scope)}:${campus}:${subject}:${semester ?? ""}`;
+    const cached = cacheGet<object>(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+    try {
+      const rows = await getSubjectProdSequence(campus, subject, semester);
+      cacheSet(cacheKey, rows, 60 * 1000);
+      res.json(rows);
+    } catch (err) {
+      req.log.error({ err }, "Error fetching subject prod sequence");
+      res.status(500).json({ error: "Failed to fetch subject prod sequence" });
+    }
+  },
+);
 
 // Campus rollup for the Campus-wise Stats view. Scope-filtered like every
 // other dashboard route, so a BOA only ever sees their own campuses.
@@ -147,14 +196,15 @@ router.get("/campuses", requireSession(), async (req, res): Promise<void> => {
     campuses: session.campuses,
     subjects: session.subjects,
   });
-  const cacheKey = `campuses:${session.role}:${JSON.stringify(scope)}`;
+  const dateRange = parseDateRange(req.query as Record<string, string | undefined>);
+  const cacheKey = `campuses:${session.role}:${JSON.stringify(scope)}:${dateRangeCacheKey(dateRange)}`;
   const cached = cacheGet<object>(cacheKey);
   if (cached) {
     res.json(cached);
     return;
   }
   try {
-    const campuses = await getCampusSummary(scope);
+    const campuses = await getCampusSummary(scope, { dateRange });
     const payload = campuses.map((c) => ({
       ...c,
       belowRequirement: c.pct < REQUIRED_PCT,
@@ -190,14 +240,15 @@ router.get(
       return;
     }
     const section = q["section"] || undefined;
-    const cacheKey = `campus-sessions:${session.role}:${JSON.stringify(scope)}:${campus}:${section ?? ""}`;
+    const dateRange = parseDateRange(q);
+    const cacheKey = `campus-sessions:${session.role}:${JSON.stringify(scope)}:${campus}:${section ?? ""}:${dateRangeCacheKey(dateRange)}`;
     const cached = cacheGet<object>(cacheKey);
     if (cached) {
       res.json(cached);
       return;
     }
     try {
-      const rows = await getCampusSessions(scope, { campus, section });
+      const rows = await getCampusSessions(scope, { campus, section, dateRange });
       cacheSet(cacheKey, rows, 60 * 1000);
       res.json(rows);
     } catch (err) {
@@ -223,7 +274,8 @@ router.get("/sessions", requireSession(), async (req, res): Promise<void> => {
   }
   const campus = q["campus"] || undefined;
   const section = q["section"] || undefined;
-  const cacheKey = `sessions:${session.role}:${JSON.stringify(scope)}:${subject}:${campus ?? ""}:${section ?? ""}`;
+  const dateRange = parseDateRange(q);
+  const cacheKey = `sessions:${session.role}:${JSON.stringify(scope)}:${subject}:${campus ?? ""}:${section ?? ""}:${dateRangeCacheKey(dateRange)}`;
   const cached = cacheGet<object>(cacheKey);
   if (cached) {
     res.json(cached);
@@ -234,6 +286,7 @@ router.get("/sessions", requireSession(), async (req, res): Promise<void> => {
       subject,
       campus,
       section,
+      dateRange,
     });
     cacheSet(cacheKey, sessions, 60 * 1000);
     res.json(sessions);
@@ -302,6 +355,7 @@ router.get("/students", requireSession(), async (req, res): Promise<void> => {
   const section = q["section"] || undefined;
   const subject = q["subject"] || undefined;
   const attendanceBand = q["attendanceBand"] || undefined;
+  const dateRange = parseDateRange(q);
   try {
     const students = await getStudentsList(scope, {
       search,
@@ -310,6 +364,7 @@ router.get("/students", requireSession(), async (req, res): Promise<void> => {
       section,
       subject,
       attendanceBand,
+      dateRange,
     });
     const withPaths = students.map((s) => ({
       studentId: s.studentId,

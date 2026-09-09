@@ -15,7 +15,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { ErrorState } from "@/components/PageStates";
 import { PageBreadcrumb } from "@/components/PageBreadcrumb";
 import { TableShell, TablePagination } from "@/components/DataTable";
-import { SubNav, ATTENDANCE_STATS_NAV } from "@/components/SubNav";
+import { SubNav, attendanceStatsNav } from "@/components/SubNav";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { useQueryParams } from "@/hooks/useQueryParams";
 import { subjectColor } from "@/lib/subjectColors";
@@ -23,6 +23,15 @@ import { Search, Loader2, ChevronRight, Download } from "lucide-react";
 import { pctColor, pctTextColor } from "@/lib/utils";
 import { useDebounceValue } from "@/hooks/useDebounceValue";
 import { exportCsv } from "@/lib/csv";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
+import {
+  applyDateRange,
+  attendanceStatsPath,
+  campusWisePath,
+  dateRangeLabel,
+  readDateRange,
+  type DateRange,
+} from "@/lib/dateRange";
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -57,22 +66,45 @@ export default function CampusWiseStats() {
   // A campus in the query string switches this page from the campus list to
   // the subject breakdown for that campus.
   const campus = query.get("campus") ?? "";
+  const range = useMemo(() => readDateRange(query), [query]);
+
+  const setRange = (next: DateRange) => {
+    setLocation(campusWisePath(next, campus || undefined));
+  };
 
   return (
     <div className="flex flex-col">
-      <SubNav items={ATTENDANCE_STATS_NAV} />
+      <SubNav
+        items={attendanceStatsNav(
+          attendanceStatsPath(range),
+          campusWisePath(range),
+        )}
+      />
       {campus ? (
-        <CampusSubjects campus={campus} setLocation={setLocation} />
+        <CampusSubjects
+          campus={campus}
+          range={range}
+          onRangeChange={setRange}
+          setLocation={setLocation}
+        />
       ) : (
-        <CampusList setLocation={setLocation} />
+        <CampusList
+          range={range}
+          onRangeChange={setRange}
+          setLocation={setLocation}
+        />
       )}
     </div>
   );
 }
 
 function CampusList({
+  range,
+  onRangeChange,
   setLocation,
 }: {
+  range: DateRange;
+  onRangeChange: (next: DateRange) => void;
   setLocation: (to: string) => void;
 }) {
   const [rows, setRows] = useState<CampusStat[]>([]);
@@ -84,10 +116,17 @@ function CampusList({
   const [page, setPage] = useState(1);
 
   useEffect(() => {
+    setPage(1);
+  }, [range.dateFrom, range.dateTo]);
+
+  useEffect(() => {
     let alive = true;
     setLoading(true);
     setFetchError(false);
-    fetch("/api/dashboard/campuses", { credentials: "include" })
+    const params = new URLSearchParams();
+    applyDateRange(params, range);
+    const qs = params.toString();
+    fetch(`/api/dashboard/campuses${qs ? `?${qs}` : ""}`, { credentials: "include" })
       .then((res) => (res.ok ? res.json() : Promise.reject()))
       .then((data: CampusStat[]) => {
         if (alive) setRows(data ?? []);
@@ -104,7 +143,7 @@ function CampusList({
     return () => {
       alive = false;
     };
-  }, []);
+  }, [range.dateFrom, range.dateTo]);
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
@@ -141,32 +180,31 @@ function CampusList({
       <PageHeader
         title="Campus-wise Stats"
         subtitle="Attendance rolled up by campus — click a row to view its subjects."
-        right={
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[200px] sm:w-64">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                placeholder="Search campuses…"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9 border-gray-200 pl-9"
-              />
-            </div>
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-            <Button
-              variant="outline"
-              className="h-9 gap-2 border-gray-200"
-              onClick={handleExport}
-              disabled={filtered.length === 0 || loading}
-            >
-              <Download className="h-4 w-4" /> Export
-            </Button>
-          </div>
-        }
       />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <DateRangeFilter value={range} onChange={onRangeChange} />
+        <div className="relative min-w-[200px] sm:w-64">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            placeholder="Search campuses…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="h-9 border-gray-200 pl-9"
+          />
+        </div>
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+        <Button
+          variant="outline"
+          className="h-9 gap-2 border-gray-200"
+          onClick={handleExport}
+          disabled={filtered.length === 0 || loading}
+        >
+          <Download className="h-4 w-4" /> Export
+        </Button>
+      </div>
 
       {fetchError && (
         <div className="mb-4">
@@ -182,6 +220,8 @@ function CampusList({
           <p className="mt-0.5 text-xs text-gray-500">
             {filtered.length.toLocaleString()} campus
             {filtered.length === 1 ? "" : "es"}
+            {" · "}
+            {dateRangeLabel(range)}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -210,7 +250,7 @@ function CampusList({
               ) : paged.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="h-32 text-center text-gray-500">
-                    No campuses found for this scope.
+                    No campuses found for this date range.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -219,9 +259,7 @@ function CampusList({
                     key={c.instituteName}
                     className="cursor-pointer border-b border-gray-200 hover:bg-brand-50/40"
                     onClick={() =>
-                      setLocation(
-                        `/dashboard/attendance-stats/campuses?campus=${encodeURIComponent(c.instituteName)}`,
-                      )
+                      setLocation(campusWisePath(range, c.instituteName))
                     }
                   >
                     <TableCell className="py-3 font-medium text-gray-900">
@@ -277,9 +315,13 @@ function CampusList({
 
 function CampusSubjects({
   campus,
+  range,
+  onRangeChange,
   setLocation,
 }: {
   campus: string;
+  range: DateRange;
+  onRangeChange: (next: DateRange) => void;
   setLocation: (to: string) => void;
 }) {
   const [rows, setRows] = useState<CampusSessionRow[]>([]);
@@ -295,13 +337,14 @@ function CampusSubjects({
     setPage(1);
     setSearch("");
     setSubjectFilter("all");
-  }, [campus]);
+  }, [campus, range.dateFrom, range.dateTo]);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setFetchError(false);
     const params = new URLSearchParams({ campus });
+    applyDateRange(params, range);
     fetch(`/api/dashboard/campus-sessions?${params.toString()}`, {
       credentials: "include",
     })
@@ -321,7 +364,7 @@ function CampusSubjects({
     return () => {
       alive = false;
     };
-  }, [campus]);
+  }, [campus, range.dateFrom, range.dateTo]);
 
   const subjectOptions = useMemo(() => {
     const seen = new Set(rows.map((r) => r.subjectTitle));
@@ -394,6 +437,7 @@ function CampusSubjects({
       from: "campuses",
     });
     if (r.date) p.set("date", r.date);
+    applyDateRange(p, range);
     setLocation(`/dashboard/attendance-stats/sessions?${p.toString()}`);
   };
 
@@ -403,7 +447,7 @@ function CampusSubjects({
         items={[
           {
             label: "Campus-wise Stats",
-            onClick: () => setLocation("/dashboard/attendance-stats/campuses"),
+            onClick: () => setLocation(campusWisePath(range)),
           },
           { label: campus, current: true },
         ]}
@@ -412,48 +456,47 @@ function CampusSubjects({
       <PageHeader
         title={campus}
         subtitle="Session-wise attendance by subject — click a row to see which students missed it."
-        right={
-          <div className="flex flex-wrap items-center gap-2">
-            {subjectOptions.length > 0 && (
-              <SearchableSelect
-                value={subjectFilter}
-                onValueChange={(v) => {
-                  setSubjectFilter(v);
-                  setPage(1);
-                }}
-                options={[
-                  { value: "all", label: "All subjects" },
-                  ...subjectOptions.map((s) => ({ value: s, label: s })),
-                ]}
-                placeholder="All subjects"
-                searchPlaceholder="Search subjects…"
-                className="w-[220px]"
-              />
-            )}
-            <div className="relative min-w-[200px] sm:w-64">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                placeholder="Search sessions…"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9 border-gray-200 pl-9"
-              />
-            </div>
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-            <Button
-              variant="outline"
-              className="h-9 gap-2 border-gray-200"
-              onClick={handleExport}
-              disabled={filtered.length === 0 || loading}
-            >
-              <Download className="h-4 w-4" /> Export
-            </Button>
-          </div>
-        }
       />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <DateRangeFilter value={range} onChange={onRangeChange} />
+        {subjectOptions.length > 0 && (
+          <SearchableSelect
+            value={subjectFilter}
+            onValueChange={(v) => {
+              setSubjectFilter(v);
+              setPage(1);
+            }}
+            options={[
+              { value: "all", label: "All subjects" },
+              ...subjectOptions.map((s) => ({ value: s, label: s })),
+            ]}
+            placeholder="All subjects"
+            searchPlaceholder="Search subjects…"
+            className="w-[220px]"
+          />
+        )}
+        <div className="relative min-w-[200px] sm:w-64">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            placeholder="Search sessions…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="h-9 border-gray-200 pl-9"
+          />
+        </div>
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+        <Button
+          variant="outline"
+          className="h-9 gap-2 border-gray-200"
+          onClick={handleExport}
+          disabled={filtered.length === 0 || loading}
+        >
+          <Download className="h-4 w-4" /> Export
+        </Button>
+      </div>
 
       {fetchError && (
         <div className="mb-4">
@@ -492,7 +535,7 @@ function CampusSubjects({
           <p className="mt-0.5 text-xs text-gray-500">
             {filtered.length.toLocaleString()} session
             {filtered.length === 1 ? "" : "s"} · lowest attendance first within
-            each subject
+            each subject · {dateRangeLabel(range)}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -520,7 +563,7 @@ function CampusSubjects({
               ) : paged.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-32 text-center text-gray-500">
-                    No sessions found for this campus.
+                    No sessions found for this campus in the selected dates.
                   </TableCell>
                 </TableRow>
               ) : (

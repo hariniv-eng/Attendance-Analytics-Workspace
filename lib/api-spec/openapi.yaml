@@ -215,6 +215,137 @@ paths:
               schema:
                 $ref: "#/components/schemas/StudentQuizzes"
 
+  /attendance/recovery/semesters:
+    get:
+      operationId: listRecoverySemesters
+      tags: [attendance]
+      summary: List available recovery semesters for a campus
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Available semester titles from BigQuery
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /attendance/recovery/subjects:
+    get:
+      operationId: listRecoverySubjects
+      tags: [attendance]
+      summary: List subjects requiring recovery for a campus and semester
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Campus recovery subjects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecoveryCampusData"
+
+  /attendance/recovery/students:
+    get:
+      operationId: listRecoveryStudents
+      tags: [attendance]
+      summary: List students requiring recovery for a subject and semester
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: subject
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Students below the recovery threshold
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RecoveryStudent"
+
+  /attendance/recovery/quiz-subjects:
+    get:
+      operationId: listQuizRecoverySubjects
+      tags: [attendance]
+      summary: List subjects whose students attend ≥80% but are not at 100% on C.Q or M.Q
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Campus quiz recovery subjects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizRecoveryCampusData"
+
+  /attendance/recovery/quiz-students:
+    get:
+      operationId: listQuizRecoveryStudents
+      tags: [attendance]
+      summary: List students at ≥80% attendance who are not at 100% on C.Q or M.Q
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: subject
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Students needing C.Q / M.Q follow-up
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuizRecoveryStudent"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -227,6 +358,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/prod-sequence:
+    get:
+      operationId: getSubjectProdSequence
+      tags: [dashboard]
+      summary: Get the ordered production curriculum and completion state for a subject
+      parameters:
+        - name: campus
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: subject
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: semester
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Ordered subject production sequence
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubjectProdSequenceItem"
 
   /dashboard/filters:
     get:
@@ -280,6 +442,18 @@ paths:
           description: "all | below50 | below80 | above80"
           schema:
             type: string
+        - name: dateFrom
+          in: query
+          description: Inclusive start date (YYYY-MM-DD) for attendance stats. Empty means start of current semester.
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          description: Inclusive end date (YYYY-MM-DD) for attendance stats. Empty means today / end of semester.
+          schema:
+            type: string
+            format: date
       responses:
         "200":
           description: Student list
@@ -640,6 +814,149 @@ paths:
 
 components:
   schemas:
+    SubjectProdSequenceItem:
+      type: object
+      required: [sessionId, order, week, topicTitle, sessionType, completed, completedAt, completedSections, totalSections]
+      properties:
+        sessionId:
+          type: string
+        order:
+          type: integer
+        week:
+          type: ["integer", "null"]
+        topicTitle:
+          type: string
+        sessionType:
+          type: ["string", "null"]
+        completed:
+          type: boolean
+        completedAt:
+          type: ["string", "null"]
+          format: date
+        completedSections:
+          type: integer
+        totalSections:
+          type: integer
+
+    RecoveryStudent:
+      type: object
+      required: [studentId, studentName, sectionName, attendancePct, presentCount, totalCount]
+      properties:
+        studentId:
+          type: string
+        studentName:
+          type: string
+        sectionName:
+          type: ["string", "null"]
+        attendancePct:
+          type: number
+        presentCount:
+          type: integer
+        totalCount:
+          type: integer
+
+    RecoverySubjectCard:
+      type: object
+      required: [subjectTitle, attendancePct, studentsBelow80Count, students]
+      properties:
+        subjectTitle:
+          type: string
+        attendancePct:
+          type: number
+        studentsBelow80Count:
+          type: integer
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecoveryStudent"
+
+    RecoveryCampusData:
+      type: object
+      required: [campus, subjects, totalSubjectsInRecovery, totalStudentsInRecovery]
+      properties:
+        campus:
+          type: string
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecoverySubjectCard"
+        totalSubjectsInRecovery:
+          type: integer
+        totalStudentsInRecovery:
+          type: integer
+
+    QuizRecoveryStudent:
+      type: object
+      required:
+        - studentId
+        - studentName
+        - sectionName
+        - attendancePct
+        - presentCount
+        - totalCount
+        - classroomAvg
+        - classroomCompleted
+        - classroomTotal
+        - moduleAvg
+        - moduleCompleted
+        - moduleTotal
+        - spiPath
+      properties:
+        studentId:
+          type: string
+        studentName:
+          type: string
+        sectionName:
+          type: ["string", "null"]
+        attendancePct:
+          type: number
+        presentCount:
+          type: integer
+        totalCount:
+          type: integer
+        classroomAvg:
+          type: ["number", "null"]
+        classroomCompleted:
+          type: integer
+        classroomTotal:
+          type: integer
+        moduleAvg:
+          type: ["number", "null"]
+        moduleCompleted:
+          type: integer
+        moduleTotal:
+          type: integer
+        spiPath:
+          type: string
+
+    QuizRecoverySubjectCard:
+      type: object
+      required: [subjectTitle, studentsNotAt100Count, students]
+      properties:
+        subjectTitle:
+          type: string
+        studentsNotAt100Count:
+          type: integer
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizRecoveryStudent"
+
+    QuizRecoveryCampusData:
+      type: object
+      required: [campus, subjects, totalSubjectsInRecovery, totalStudentsInRecovery]
+      properties:
+        campus:
+          type: string
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizRecoverySubjectCard"
+        totalSubjectsInRecovery:
+          type: integer
+        totalStudentsInRecovery:
+          type: integer
+
     HealthStatus:
       type: object
       properties:

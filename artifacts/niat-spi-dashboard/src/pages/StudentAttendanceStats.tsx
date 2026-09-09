@@ -26,7 +26,7 @@ import {
   SearchableSelect,
   campusSelectOptions,
 } from "@/components/SearchableSelect";
-import { SubNav, ATTENDANCE_STATS_NAV } from "@/components/SubNav";
+import { SubNav, attendanceStatsNav } from "@/components/SubNav";
 import {
   Search,
   Loader2,
@@ -39,6 +39,15 @@ import { useDebounceValue } from "@/hooks/useDebounceValue";
 import { useQueryParams } from "@/hooks/useQueryParams";
 import { exportCsv } from "@/lib/csv";
 import { useAuth } from "@/contexts/AuthContext";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
+import {
+  applyDateRange,
+  attendanceStatsPath,
+  campusWisePath,
+  dateRangeLabel,
+  readDateRange,
+  type DateRange,
+} from "@/lib/dateRange";
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -49,6 +58,7 @@ export default function StudentAttendanceStats() {
   const query = useQueryParams();
 
   const urlCampus = query.get("campus");
+  const range = useMemo(() => readDateRange(query), [query]);
 
   const campus = useMemo(() => {
     if (urlCampus) return urlCampus;
@@ -80,12 +90,14 @@ export default function StudentAttendanceStats() {
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
 
+  const setRange = (next: DateRange) => {
+    setPage(1);
+    setLocation(attendanceStatsPath(next, campus === "all" ? undefined : campus));
+  };
+
   const setCampusFilter = (value: string) => {
     setPage(1);
-    const params = new URLSearchParams();
-    if (value !== "all") params.set("campus", value);
-    const qs = params.toString();
-    setLocation(`/dashboard/attendance-stats${qs ? `?${qs}` : ""}`);
+    setLocation(attendanceStatsPath(range, value === "all" ? undefined : value));
   };
 
   useEffect(() => {
@@ -94,6 +106,7 @@ export default function StudentAttendanceStats() {
     setFetchError(false);
     const params = new URLSearchParams();
     if (campus !== "all") params.set("campus", campus);
+    applyDateRange(params, range);
     fetch(`/api/dashboard/subjects?${params.toString()}`, {
       credentials: "include",
     })
@@ -113,7 +126,7 @@ export default function StudentAttendanceStats() {
     return () => {
       alive = false;
     };
-  }, [campus]);
+  }, [campus, range.dateFrom, range.dateTo]);
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
@@ -153,25 +166,32 @@ export default function StudentAttendanceStats() {
       pct: String(s.pct),
     });
     if (campus !== "all") params.set("campus", campus);
+    applyDateRange(params, range);
     setLocation(`/dashboard/attendance-stats/students?${params.toString()}`);
   };
 
   const openSessions = (s: SubjectSummary) => {
     const params = new URLSearchParams({ subject: s.subjectTitle });
     if (campus !== "all") params.set("campus", campus);
+    applyDateRange(params, range);
     setLocation(`/dashboard/attendance-stats/sessions?${params.toString()}`);
   };
 
   return (
     <div className="flex flex-col">
-      <SubNav items={ATTENDANCE_STATS_NAV} />
+      <SubNav
+        items={attendanceStatsNav(
+          attendanceStatsPath(range),
+          campusWisePath(range),
+        )}
+      />
 
       {campus !== "all" && !(isBoa && user?.campuses?.length === 1) && (
         <PageBreadcrumb
           items={[
             {
               label: "Student Attendance Stats",
-              onClick: () => setLocation("/dashboard/attendance-stats"),
+              onClick: () => setLocation(attendanceStatsPath(range)),
             },
             { label: campus, current: true },
           ]}
@@ -181,42 +201,41 @@ export default function StudentAttendanceStats() {
       <PageHeader
         title="Student Attendance Stats"
         subtitle="Subject-wise attendance — click a row to view students in that subject."
-        right={
-          <div className="flex flex-wrap items-center gap-2">
-            {!isBoa && campusOptions.length > 0 && (
-              <SearchableSelect
-                value={campus}
-                onValueChange={setCampusFilter}
-                options={campusSelectOptions(campusOptions)}
-                placeholder="All campuses"
-                searchPlaceholder="Search campuses…"
-                className="w-[220px]"
-              />
-            )}
-            <div className="relative min-w-[200px] sm:w-64">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                placeholder="Search subjects…"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9 border-gray-200 pl-9"
-              />
-            </div>
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-            <Button
-              variant="outline"
-              className="h-9 gap-2 border-gray-200"
-              onClick={handleExport}
-              disabled={filtered.length === 0 || loading}
-            >
-              <Download className="h-4 w-4" /> Export
-            </Button>
-          </div>
-        }
       />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <DateRangeFilter value={range} onChange={setRange} />
+        {!isBoa && campusOptions.length > 0 && (
+          <SearchableSelect
+            value={campus}
+            onValueChange={setCampusFilter}
+            options={campusSelectOptions(campusOptions)}
+            placeholder="All campuses"
+            searchPlaceholder="Search campuses…"
+            className="w-[220px]"
+          />
+        )}
+        <div className="relative min-w-[200px] sm:w-64">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            placeholder="Search subjects…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="h-9 border-gray-200 pl-9"
+          />
+        </div>
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+        <Button
+          variant="outline"
+          className="h-9 gap-2 border-gray-200"
+          onClick={handleExport}
+          disabled={filtered.length === 0 || loading}
+        >
+          <Download className="h-4 w-4" /> Export
+        </Button>
+      </div>
 
       {fetchError && (
         <div className="mb-4">
@@ -232,6 +251,8 @@ export default function StudentAttendanceStats() {
           </h2>
           <p className="mt-0.5 text-xs text-gray-500">
             {filtered.length.toLocaleString()} subject{filtered.length === 1 ? "" : "s"}
+            {" · "}
+            {dateRangeLabel(range)}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -259,7 +280,7 @@ export default function StudentAttendanceStats() {
               ) : paged.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-32 text-center text-gray-500">
-                    No subjects found for this scope.
+                    No subjects found for this date range.
                   </TableCell>
                 </TableRow>
               ) : (

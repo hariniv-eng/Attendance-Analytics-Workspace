@@ -47,3 +47,4 @@ BQ_LOCATION = "asia-south1"
 
 [nix]
 channel = "stable-25_05"
+packages = ["google-cloud-sdk-gce"]

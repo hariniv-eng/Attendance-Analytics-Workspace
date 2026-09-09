@@ -1,6 +1,7 @@
 import {
   bqQuery,
   pct,
+  PROD_SEQUENCE_TABLE,
   validateStudentId,
   normalizeStudentId,
 } from "./bigquery.js";
@@ -50,8 +51,15 @@ const PROD_SEQUENCE_TABLE =
 function scopeClause(
   scope: SessionScope,
   params: Record<string, unknown>,
+  options: { semester?: string; currentSemester?: boolean } = {},
 ): string {
-  const clauses: string[] = ["is_current_semester = 1"];
+  const clauses: string[] = [];
+  if (options.semester) {
+    clauses.push("derived_semester_title = @semester");
+    params["semester"] = options.semester;
+  } else if (options.currentSemester !== false) {
+    clauses.push("is_current_semester = 1");
+  }
   if (scope.campuses && scope.campuses.length > 0) {
     clauses.push("institute_name IN UNNEST(@campuses)");
     params["campuses"] = scope.campuses;
@@ -60,7 +68,79 @@ function scopeClause(
     clauses.push("subject_title IN UNNEST(@subjects)");
     params["subjects"] = scope.subjects;
   }
-  return clauses.join(" AND ");
+  return clauses.length > 0 ? clauses.join(" AND ") : "TRUE";
+}
+
+export async function getRecoverySemesters(
+  campus: string,
+  scope: SessionScope,
+): Promise<string[]> {
+  const params: Record<string, unknown> = { campus };
+  const where = scopeClause(scope, params, { currentSemester: false });
+  const rows = await bqQuery<{ semester: string }>(
+    `SELECT DISTINCT TRIM(derived_semester_title) AS semester
+     FROM ${ATTENDANCE_TABLE}
+     WHERE ${where}
+       AND institute_name = @campus
+       AND derived_semester_title IS NOT NULL
+       AND TRIM(derived_semester_title) != ''
+     ORDER BY semester`,
+    params,
+  );
+
+  return rows
+    .map((row) => row.semester)
+    .sort((left, right) =>
+      right.localeCompare(left, undefined, { numeric: true, sensitivity: "base" }),
+    );
+}
+
+export const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export interface DateRangeFilter {
+  from?: string;
+  to?: string;
+}
+
+/** Parse `dateFrom` / `dateTo` query params. Invalid values are dropped. */
+export function parseDateRange(
+  q: Record<string, string | undefined>,
+): DateRangeFilter | undefined {
+  let from = q["dateFrom"]?.trim() || undefined;
+  let to = q["dateTo"]?.trim() || undefined;
+  if (from && !ISO_DATE_RE.test(from)) from = undefined;
+  if (to && !ISO_DATE_RE.test(to)) to = undefined;
+  if (from && to && from > to) {
+    const swap = from;
+    from = to;
+    to = swap;
+  }
+  if (!from && !to) return undefined;
+  return { from, to };
+}
+
+export function dateRangeCacheKey(
+  range: DateRangeFilter | undefined,
+): string {
+  if (!range) return "";
+  return `${range.from ?? ""}:${range.to ?? ""}`;
+}
+
+function dateRangeClause(
+  range: DateRangeFilter | undefined,
+  params: Record<string, unknown>,
+): string {
+  if (!range) return "";
+  const parts: string[] = [];
+  if (range.from) {
+    params["dateFrom"] = range.from;
+    parts.push("DATE(date) >= DATE(@dateFrom)");
+  }
+  if (range.to) {
+    params["dateTo"] = range.to;
+    parts.push("DATE(date) <= DATE(@dateTo)");
+  }
+  return parts.length > 0 ? ` AND ${parts.join(" AND ")}` : "";
 }
 
 export interface StudentOverview {
@@ -348,10 +428,11 @@ export async function getStudentsList(
     section?: string;
     subject?: string;
     attendanceBand?: string;
+    dateRange?: DateRangeFilter;
   } = {},
 ): Promise<StudentSearchResult[]> {
   const params: Record<string, unknown> = {};
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params) + dateRangeClause(opts.dateRange, params);
   const safeLimit = Math.min(opts.limit ?? 1000, 5000);
   let searchFilter = "";
   if (opts.search) {
@@ -468,9 +549,10 @@ export interface SectionSummaryItem {
 
 export async function getCampusSummary(
   scope: SessionScope,
+  opts: { dateRange?: DateRangeFilter } = {},
 ): Promise<CampusSummaryItem[]> {
   const params: Record<string, unknown> = {};
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params) + dateRangeClause(opts.dateRange, params);
   const rows = await bqQuery<{
     institute_name: string;
     student_count: string;
@@ -555,10 +637,10 @@ export interface SubjectSummaryItem {
 
 export async function getSubjectSummary(
   scope: SessionScope,
-  opts: { campus?: string } = {},
+  opts: { campus?: string; dateRange?: DateRangeFilter } = {},
 ): Promise<SubjectSummaryItem[]> {
   const params: Record<string, unknown> = {};
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params) + dateRangeClause(opts.dateRange, params);
   let campusFilter = "";
   if (opts.campus) {
     params["filterCampus"] = opts.campus;
@@ -610,10 +692,15 @@ export interface SessionSummaryItem {
  */
 export async function getSubjectSessions(
   scope: SessionScope,
-  opts: { subject: string; campus?: string; section?: string },
+  opts: {
+    subject: string;
+    campus?: string;
+    section?: string;
+    dateRange?: DateRangeFilter;
+  },
 ): Promise<SessionSummaryItem[]> {
   const params: Record<string, unknown> = { subject: opts.subject };
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params) + dateRangeClause(opts.dateRange, params);
   let extra = " AND subject_title = @subject";
   if (opts.campus) {
     params["campus"] = opts.campus;
@@ -674,10 +761,10 @@ export interface CampusSessionRow {
  */
 export async function getCampusSessions(
   scope: SessionScope,
-  opts: { campus: string; section?: string },
+  opts: { campus: string; section?: string; dateRange?: DateRangeFilter },
 ): Promise<CampusSessionRow[]> {
   const params: Record<string, unknown> = { campus: opts.campus };
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params) + dateRangeClause(opts.dateRange, params);
   let extra = " AND institute_name = @campus";
   if (opts.section) {
     params["section"] = opts.section;
@@ -811,6 +898,82 @@ export interface RecoveryStudent {
   totalCount: number;
 }
 
+export interface SubjectProdSequenceItem {
+  sessionId: string;
+  order: number;
+  week: number | null;
+  topicTitle: string;
+  sessionType: string | null;
+  completed: boolean;
+  completedAt: string | null;
+  completedSections: number;
+  totalSections: number;
+}
+
+export async function getSubjectProdSequence(
+  campus: string,
+  subject: string,
+  semester?: string,
+): Promise<SubjectProdSequenceItem[]> {
+  const params: Record<string, unknown> = { campus, subject };
+  const semesterClause = semester
+    ? "semester_title = @semester"
+    : "is_current_semester = 1";
+  if (semester) params["semester"] = semester;
+
+  const rows = await bqQuery<{
+    session_id: string;
+    sequence_order: string;
+    week_count: string | null;
+    session_title: string;
+    session_type: string | null;
+    completed: boolean | string;
+    completed_at: string | null;
+    completed_sections: string;
+    total_sections: string;
+  }>(
+    `SELECT
+       session_id,
+       MIN(COALESCE(calculated_session_id_order, session_id_order, schedule_rn)) AS sequence_order,
+       MIN(week_count) AS week_count,
+       ANY_VALUE(session_title) AS session_title,
+       ANY_VALUE(session_type) AS session_type,
+       COUNTIF(UPPER(COALESCE(session_status, '')) = 'COMPLETED') > 0 AS completed,
+       CAST(MIN(IF(
+         UPPER(COALESCE(session_status, '')) = 'COMPLETED',
+         DATE(session_start_datetime),
+         NULL
+       )) AS STRING) AS completed_at,
+       COUNT(DISTINCT IF(
+         UPPER(COALESCE(session_status, '')) = 'COMPLETED',
+         section_id,
+         NULL
+       )) AS completed_sections,
+       COUNT(DISTINCT section_id) AS total_sections
+     FROM ${PROD_SEQUENCE_TABLE}
+     WHERE institute_name = @campus
+       AND course_title = @subject
+       AND ${semesterClause}
+       AND session_id IS NOT NULL
+       AND session_title IS NOT NULL
+     GROUP BY session_id
+     ORDER BY sequence_order, session_title`,
+    params,
+  );
+
+  return rows.map((row) => ({
+    sessionId: row.session_id,
+    order: Number(row.sequence_order),
+    week: row.week_count === null ? null : Number(row.week_count),
+    topicTitle: row.session_title,
+    sessionType: row.session_type ?? null,
+    completed: row.completed === true || row.completed === "true",
+    completedAt: row.completed_at ?? null,
+    completedSections: Number(row.completed_sections),
+    totalSections: Number(row.total_sections),
+  }));
+}
+
 export interface RecoverySubjectCard {
   subjectTitle: string;
   attendancePct: number;
@@ -834,9 +997,10 @@ export interface RecoveryCampusData {
 export async function getCampusSubjectRecovery(
   campus: string,
   scope: SessionScope,
+  semester?: string,
 ): Promise<RecoveryCampusData> {
   const params: Record<string, unknown> = { campus };
-  const where = scopeClause(scope, params);
+  const where = scopeClause(scope, params, { semester });
 
   const rows = await bqQuery<{
     subject_title: string;
@@ -950,6 +1114,327 @@ export async function getCampusSubjectRecovery(
     totalSubjectsInRecovery: subjectCards.length,
     totalStudentsInRecovery: studentIds.size,
   };
+}
+
+export async function getRecoveryStudents(
+  campus: string,
+  subject: string,
+  semester: string,
+  scope: SessionScope,
+): Promise<RecoveryStudent[]> {
+  const params: Record<string, unknown> = { campus, subject };
+  const where = scopeClause(scope, params, { semester });
+  const rows = await bqQuery<{
+    student_user_id: string;
+    student_name: string;
+    batch_section_name: string | null;
+    present_count: string;
+    total_count: string;
+    subject_pct: string;
+  }>(
+    `SELECT
+       student_user_id,
+       MAX(student_name) AS student_name,
+       MAX(batch_section_name) AS batch_section_name,
+       COUNTIF(LOWER(attendance_status) = 'present') AS present_count,
+       COUNT(*) AS total_count,
+       SAFE_DIVIDE(COUNTIF(LOWER(attendance_status) = 'present'), COUNT(*)) * 100 AS subject_pct
+     FROM ${ATTENDANCE_TABLE}
+     WHERE ${where}
+       AND institute_name = @campus
+       AND subject_title = @subject
+       AND COALESCE(session_title, '') NOT IN (
+         'Coding Practice',
+         'MCQ Practice',
+         'Module Quiz'
+       )
+     GROUP BY student_user_id
+     HAVING CAST(subject_pct AS FLOAT64) < 80
+     ORDER BY subject_pct ASC, student_name`,
+    params,
+  );
+
+  return rows.map((row) => ({
+    studentId: row.student_user_id,
+    studentName: row.student_name,
+    sectionName: row.batch_section_name ?? null,
+    attendancePct: Number(row.subject_pct),
+    presentCount: Number(row.present_count),
+    totalCount: Number(row.total_count),
+  }));
+}
+
+const LECTURE_SESSION_EXCLUSIONS = `COALESCE(session_title, '') NOT IN (
+          'Coding Practice',
+          'MCQ Practice',
+          'Module Quiz'
+        )`;
+
+/** C.Q / M.Q fail the 100% bar if unfinished or average best score is under 100. */
+function quizFails100Sql(completed: string, total: string, avg: string): string {
+  return `(${total} > 0 AND (${completed} < ${total} OR IFNULL(${avg}, 0) < 100))`;
+}
+
+export interface QuizRecoveryStudent {
+  studentId: string;
+  studentName: string;
+  sectionName: string | null;
+  attendancePct: number;
+  presentCount: number;
+  totalCount: number;
+  classroomAvg: number | null;
+  classroomCompleted: number;
+  classroomTotal: number;
+  moduleAvg: number | null;
+  moduleCompleted: number;
+  moduleTotal: number;
+}
+
+export interface QuizRecoverySubjectCard {
+  subjectTitle: string;
+  studentsNotAt100Count: number;
+  students: QuizRecoveryStudent[];
+}
+
+export interface QuizRecoveryCampusData {
+  campus: string;
+  subjects: QuizRecoverySubjectCard[];
+  totalSubjectsInRecovery: number;
+  totalStudentsInRecovery: number;
+}
+
+function mapQuizRecoveryStudent(row: {
+  student_user_id: string;
+  student_name: string;
+  batch_section_name: string | null;
+  present_count: string;
+  total_count: string;
+  subject_pct: string;
+  cq_avg: string | null;
+  cq_completed: string;
+  cq_total: string;
+  mq_avg: string | null;
+  mq_completed: string;
+  mq_total: string;
+}): QuizRecoveryStudent {
+  const round1 = (v: string | null): number | null => {
+    if (v === null || v === undefined) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.round(n * 10) / 10 : null;
+  };
+  return {
+    studentId: row.student_user_id,
+    studentName: row.student_name,
+    sectionName: row.batch_section_name ?? null,
+    attendancePct: Number(row.subject_pct),
+    presentCount: Number(row.present_count),
+    totalCount: Number(row.total_count),
+    classroomAvg: round1(row.cq_avg),
+    classroomCompleted: Number(row.cq_completed ?? 0),
+    classroomTotal: Number(row.cq_total ?? 0),
+    moduleAvg: round1(row.mq_avg),
+    moduleCompleted: Number(row.mq_completed ?? 0),
+    moduleTotal: Number(row.mq_total ?? 0),
+  };
+}
+
+/**
+ * Students with lecture attendance ≥ 80% whose C.Q or M.Q is not fully
+ * completed at 100% average. Skill assessment is not in BigQuery yet.
+ */
+export async function getCampusQuizRecovery(
+  campus: string,
+  scope: SessionScope,
+  semester?: string,
+): Promise<QuizRecoveryCampusData> {
+  const params: Record<string, unknown> = { campus };
+  const where = scopeClause(scope, params, { semester });
+  const rows = await bqQuery<{
+    subject_title: string;
+    student_user_id: string;
+    student_name: string;
+    batch_section_name: string | null;
+    present_count: string;
+    total_count: string;
+    subject_pct: string;
+    cq_avg: string | null;
+    cq_completed: string;
+    cq_total: string;
+    mq_avg: string | null;
+    mq_completed: string;
+    mq_total: string;
+  }>(
+    `WITH att AS (
+      SELECT
+        subject_title,
+        student_user_id,
+        MAX(student_name) AS student_name,
+        MAX(batch_section_name) AS batch_section_name,
+        COUNTIF(LOWER(attendance_status) = 'present') AS present_count,
+        COUNT(*) AS total_count,
+        SAFE_DIVIDE(COUNTIF(LOWER(attendance_status) = 'present'), COUNT(*)) * 100 AS subject_pct
+      FROM ${ATTENDANCE_TABLE}
+      WHERE ${where}
+        AND institute_name = @campus
+        AND ${LECTURE_SESSION_EXCLUSIONS}
+      GROUP BY subject_title, student_user_id
+      HAVING CAST(subject_pct AS FLOAT64) >= 80
+    ),
+    quiz AS (
+      SELECT
+        user_id,
+        COALESCE(NULLIF(TRIM(semester_course_title), ''), course_title) AS subject_title,
+        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%', 0,
+          IFNULL(SAFE_CAST(total_quizzes AS INT64), 0))) AS cq_total,
+        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%', 0,
+          IFNULL(SAFE_CAST(total_completed_quizzes AS INT64), 0))) AS cq_completed,
+        AVG(IF(UPPER(derived_unit_type) LIKE '%MODULE%', NULL,
+          IFNULL(SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), 0))) AS cq_avg,
+        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%',
+          IFNULL(SAFE_CAST(total_quizzes AS INT64), 0), 0)) AS mq_total,
+        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%',
+          IFNULL(SAFE_CAST(total_completed_quizzes AS INT64), 0), 0)) AS mq_completed,
+        AVG(IF(UPPER(derived_unit_type) NOT LIKE '%MODULE%', NULL,
+          IFNULL(SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), 0))) AS mq_avg
+      FROM ${QUIZ_TABLE}
+      WHERE (institute_name = @campus OR institute_name IS NULL)
+      GROUP BY user_id, COALESCE(NULLIF(TRIM(semester_course_title), ''), course_title)
+    )
+    SELECT
+      att.subject_title,
+      att.student_user_id,
+      att.student_name,
+      att.batch_section_name,
+      att.present_count,
+      att.total_count,
+      att.subject_pct,
+      quiz.cq_avg,
+      quiz.cq_completed,
+      quiz.cq_total,
+      quiz.mq_avg,
+      quiz.mq_completed,
+      quiz.mq_total
+    FROM att
+    INNER JOIN quiz
+      ON LOWER(REPLACE(CAST(quiz.user_id AS STRING), '-', ''))
+       = LOWER(REPLACE(CAST(att.student_user_id AS STRING), '-', ''))
+     AND LOWER(TRIM(CAST(quiz.subject_title AS STRING)))
+       = LOWER(TRIM(CAST(att.subject_title AS STRING)))
+    WHERE ${quizFails100Sql("quiz.cq_completed", "quiz.cq_total", "quiz.cq_avg")}
+       OR ${quizFails100Sql("quiz.mq_completed", "quiz.mq_total", "quiz.mq_avg")}
+    ORDER BY att.subject_title, att.student_name`,
+    params,
+  );
+
+  const subjectMap = new Map<string, QuizRecoveryStudent[]>();
+  const studentIds = new Set<string>();
+  for (const row of rows) {
+    const student = mapQuizRecoveryStudent(row);
+    const list = subjectMap.get(row.subject_title) ?? [];
+    list.push(student);
+    subjectMap.set(row.subject_title, list);
+    studentIds.add(student.studentId);
+  }
+
+  const subjects: QuizRecoverySubjectCard[] = [...subjectMap.entries()]
+    .map(([subjectTitle, students]) => ({
+      subjectTitle,
+      studentsNotAt100Count: students.length,
+      students,
+    }))
+    .sort((a, b) => a.subjectTitle.localeCompare(b.subjectTitle));
+
+  return {
+    campus,
+    subjects,
+    totalSubjectsInRecovery: subjects.length,
+    totalStudentsInRecovery: studentIds.size,
+  };
+}
+
+export async function getQuizRecoveryStudents(
+  campus: string,
+  subject: string,
+  semester: string,
+  scope: SessionScope,
+): Promise<QuizRecoveryStudent[]> {
+  const params: Record<string, unknown> = { campus, subject };
+  const where = scopeClause(scope, params, { semester });
+  const rows = await bqQuery<{
+    student_user_id: string;
+    student_name: string;
+    batch_section_name: string | null;
+    present_count: string;
+    total_count: string;
+    subject_pct: string;
+    cq_avg: string | null;
+    cq_completed: string;
+    cq_total: string;
+    mq_avg: string | null;
+    mq_completed: string;
+    mq_total: string;
+  }>(
+    `WITH att AS (
+      SELECT
+        student_user_id,
+        MAX(student_name) AS student_name,
+        MAX(batch_section_name) AS batch_section_name,
+        COUNTIF(LOWER(attendance_status) = 'present') AS present_count,
+        COUNT(*) AS total_count,
+        SAFE_DIVIDE(COUNTIF(LOWER(attendance_status) = 'present'), COUNT(*)) * 100 AS subject_pct
+      FROM ${ATTENDANCE_TABLE}
+      WHERE ${where}
+        AND institute_name = @campus
+        AND subject_title = @subject
+        AND ${LECTURE_SESSION_EXCLUSIONS}
+      GROUP BY student_user_id
+      HAVING CAST(subject_pct AS FLOAT64) >= 80
+    ),
+    quiz AS (
+      SELECT
+        user_id,
+        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%', 0,
+          IFNULL(SAFE_CAST(total_quizzes AS INT64), 0))) AS cq_total,
+        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%', 0,
+          IFNULL(SAFE_CAST(total_completed_quizzes AS INT64), 0))) AS cq_completed,
+        AVG(IF(UPPER(derived_unit_type) LIKE '%MODULE%', NULL,
+          IFNULL(SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), 0))) AS cq_avg,
+        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%',
+          IFNULL(SAFE_CAST(total_quizzes AS INT64), 0), 0)) AS mq_total,
+        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%',
+          IFNULL(SAFE_CAST(total_completed_quizzes AS INT64), 0), 0)) AS mq_completed,
+        AVG(IF(UPPER(derived_unit_type) NOT LIKE '%MODULE%', NULL,
+          IFNULL(SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), 0))) AS mq_avg
+      FROM ${QUIZ_TABLE}
+      WHERE (institute_name = @campus OR institute_name IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(NULLIF(TRIM(semester_course_title), ''), course_title) AS STRING)))
+          = LOWER(TRIM(@subject))
+      GROUP BY user_id
+    )
+    SELECT
+      att.student_user_id,
+      att.student_name,
+      att.batch_section_name,
+      att.present_count,
+      att.total_count,
+      att.subject_pct,
+      quiz.cq_avg,
+      quiz.cq_completed,
+      quiz.cq_total,
+      quiz.mq_avg,
+      quiz.mq_completed,
+      quiz.mq_total
+    FROM att
+    INNER JOIN quiz
+      ON LOWER(REPLACE(CAST(quiz.user_id AS STRING), '-', ''))
+       = LOWER(REPLACE(CAST(att.student_user_id AS STRING), '-', ''))
+    WHERE ${quizFails100Sql("quiz.cq_completed", "quiz.cq_total", "quiz.cq_avg")}
+       OR ${quizFails100Sql("quiz.mq_completed", "quiz.mq_total", "quiz.mq_avg")}
+    ORDER BY att.student_name`,
+    params,
+  );
+
+  return rows.map(mapQuizRecoveryStudent);
 }
 
 export interface RecoveryProgressSummary {

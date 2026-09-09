@@ -5,6 +5,77 @@
  * NIAT SPI Platform API
  * OpenAPI spec version: 0.1.0
  */
+export interface SubjectProdSequenceItem {
+  sessionId: string;
+  order: number;
+  /** @nullable */
+  week: number | null;
+  topicTitle: string;
+  /** @nullable */
+  sessionType: string | null;
+  completed: boolean;
+  /** @nullable */
+  completedAt: string | null;
+  completedSections: number;
+  totalSections: number;
+}
+
+export interface RecoveryStudent {
+  studentId: string;
+  studentName: string;
+  /** @nullable */
+  sectionName: string | null;
+  attendancePct: number;
+  presentCount: number;
+  totalCount: number;
+}
+
+export interface RecoverySubjectCard {
+  subjectTitle: string;
+  attendancePct: number;
+  studentsBelow80Count: number;
+  students: RecoveryStudent[];
+}
+
+export interface RecoveryCampusData {
+  campus: string;
+  subjects: RecoverySubjectCard[];
+  totalSubjectsInRecovery: number;
+  totalStudentsInRecovery: number;
+}
+
+export interface QuizRecoveryStudent {
+  studentId: string;
+  studentName: string;
+  /** @nullable */
+  sectionName: string | null;
+  attendancePct: number;
+  presentCount: number;
+  totalCount: number;
+  /** @nullable */
+  classroomAvg: number | null;
+  classroomCompleted: number;
+  classroomTotal: number;
+  /** @nullable */
+  moduleAvg: number | null;
+  moduleCompleted: number;
+  moduleTotal: number;
+  spiPath: string;
+}
+
+export interface QuizRecoverySubjectCard {
+  subjectTitle: string;
+  studentsNotAt100Count: number;
+  students: QuizRecoveryStudent[];
+}
+
+export interface QuizRecoveryCampusData {
+  campus: string;
+  subjects: QuizRecoverySubjectCard[];
+  totalSubjectsInRecovery: number;
+  totalStudentsInRecovery: number;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -364,6 +435,38 @@ export type FetchStudentQuizzesParams = {
 t?: string;
 };
 
+export type ListRecoverySemestersParams = {
+campus: string;
+};
+
+export type ListRecoverySubjectsParams = {
+campus: string;
+semester?: string;
+};
+
+export type ListRecoveryStudentsParams = {
+campus: string;
+semester: string;
+subject: string;
+};
+
+export type ListQuizRecoverySubjectsParams = {
+campus: string;
+semester?: string;
+};
+
+export type ListQuizRecoveryStudentsParams = {
+campus: string;
+semester: string;
+subject: string;
+};
+
+export type GetSubjectProdSequenceParams = {
+campus: string;
+subject: string;
+semester?: string;
+};
+
 export type GetDashboardFiltersParams = {
 /**
  * When set, sections are limited to this campus
@@ -384,6 +487,14 @@ subject?: string;
  * all | below50 | below80 | above80
  */
 attendanceBand?: string;
+/**
+ * Inclusive start date (YYYY-MM-DD) for attendance stats. Empty means start of current semester.
+ */
+dateFrom?: string;
+/**
+ * Inclusive end date (YYYY-MM-DD) for attendance stats. Empty means today / end of semester.
+ */
+dateTo?: string;
 };
 
 export type ListInstructorRecoverySessionsParams = {

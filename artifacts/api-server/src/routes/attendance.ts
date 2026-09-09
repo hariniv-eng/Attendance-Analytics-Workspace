@@ -12,6 +12,7 @@ import { requireSession, getSessionFromRequest } from "../lib/auth.js";
 import {
   makeCampusAccessToken,
   makeSpiToken,
+  spiSharePath,
   verifyCampusAccessToken,
   verifySpiToken,
 } from "../lib/spiToken.js";
@@ -25,7 +26,12 @@ import {
   searchStudents,
   getStudentQuizzes,
   getCampusSubjectRecovery,
+  getCampusQuizRecovery,
+  getRecoverySemesters,
+  getRecoveryStudents,
+  getQuizRecoveryStudents,
   getCampusSummary,
+  type QuizRecoveryStudent,
 } from "../lib/queries.js";
 import type { Role } from "../lib/rbac.js";
 import { scopeForSession } from "../lib/rbac.js";
@@ -514,7 +520,31 @@ router.post(
   },
 );
 
-// Recovery dashboard - subject-wise attendance below 80% by campus
+router.get("/recovery/semesters", requireSession(), async (req, res): Promise<void> => {
+  const session = req.session!;
+  if (session.role === "instructor") {
+    res.status(403).json({ error: "Instructors can only view their assigned recovery sessions" });
+    return;
+  }
+  const scope = scopeForSession({
+    role: session.role as Role,
+    campuses: session.campuses,
+    subjects: session.subjects,
+  });
+  const campus = String(req.query["campus"] ?? "");
+  if (!campus) {
+    res.status(400).json({ error: "Campus parameter is required" });
+    return;
+  }
+  try {
+    res.json(await getRecoverySemesters(campus, scope));
+  } catch (err) {
+    req.log.error({ err }, "Error fetching recovery semesters");
+    res.status(500).json({ error: "Failed to fetch recovery semesters" });
+  }
+});
+
+// Recovery dashboard - subject-wise attendance below 80% by campus and semester
 router.get("/recovery/subjects", requireSession(), async (req, res): Promise<void> => {
   const session = req.session!;
   if (session.role === "instructor") {
@@ -527,16 +557,117 @@ router.get("/recovery/subjects", requireSession(), async (req, res): Promise<voi
     subjects: session.subjects,
   });
   const campus = (req.query as Record<string, string>)["campus"] ?? "";
+  const semester = (req.query as Record<string, string>)["semester"] ?? "";
   if (!campus) {
     res.status(400).json({ error: "Campus parameter is required" });
     return;
   }
   try {
-    const data = await getCampusSubjectRecovery(campus, scope);
+    const data = await getCampusSubjectRecovery(
+      campus,
+      scope,
+      semester || undefined,
+    );
     res.json(data);
   } catch (err) {
     req.log.error({ err }, "Error fetching subject recovery data");
     res.status(500).json({ error: "Failed to fetch subject recovery data" });
+  }
+});
+
+router.get("/recovery/students", requireSession(), async (req, res): Promise<void> => {
+  const session = req.session!;
+  if (session.role === "instructor") {
+    res.status(403).json({ error: "Instructors can only view their assigned recovery sessions" });
+    return;
+  }
+  const scope = scopeForSession({
+    role: session.role as Role,
+    campuses: session.campuses,
+    subjects: session.subjects,
+  });
+  const query = req.query as Record<string, string>;
+  const campus = query["campus"] ?? "";
+  const semester = query["semester"] ?? "";
+  const subject = query["subject"] ?? "";
+  if (!campus || !semester || !subject) {
+    res.status(400).json({ error: "Campus, semester, and subject parameters are required" });
+    return;
+  }
+  try {
+    res.json(await getRecoveryStudents(campus, subject, semester, scope));
+  } catch (err) {
+    req.log.error({ err }, "Error fetching recovery students");
+    res.status(500).json({ error: "Failed to fetch recovery students" });
+  }
+});
+
+function withQuizSpi(student: QuizRecoveryStudent) {
+  return { ...student, spiPath: spiSharePath(student.studentId) };
+}
+
+// C.Q / M.Q recovery: attendance ≥ 80% and quizzes not fully completed at 100%
+router.get("/recovery/quiz-subjects", requireSession(), async (req, res): Promise<void> => {
+  const session = req.session!;
+  if (session.role === "instructor") {
+    res.status(403).json({ error: "Instructors can only view their assigned recovery sessions" });
+    return;
+  }
+  const scope = scopeForSession({
+    role: session.role as Role,
+    campuses: session.campuses,
+    subjects: session.subjects,
+  });
+  const campus = (req.query as Record<string, string>)["campus"] ?? "";
+  const semester = (req.query as Record<string, string>)["semester"] ?? "";
+  if (!campus) {
+    res.status(400).json({ error: "Campus parameter is required" });
+    return;
+  }
+  try {
+    const data = await getCampusQuizRecovery(
+      campus,
+      scope,
+      semester || undefined,
+    );
+    res.json({
+      ...data,
+      subjects: data.subjects.map((subject) => ({
+        ...subject,
+        students: subject.students.map(withQuizSpi),
+      })),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Error fetching quiz recovery data");
+    res.status(500).json({ error: "Failed to fetch quiz recovery data" });
+  }
+});
+
+router.get("/recovery/quiz-students", requireSession(), async (req, res): Promise<void> => {
+  const session = req.session!;
+  if (session.role === "instructor") {
+    res.status(403).json({ error: "Instructors can only view their assigned recovery sessions" });
+    return;
+  }
+  const scope = scopeForSession({
+    role: session.role as Role,
+    campuses: session.campuses,
+    subjects: session.subjects,
+  });
+  const query = req.query as Record<string, string>;
+  const campus = query["campus"] ?? "";
+  const semester = query["semester"] ?? "";
+  const subject = query["subject"] ?? "";
+  if (!campus || !semester || !subject) {
+    res.status(400).json({ error: "Campus, semester, and subject parameters are required" });
+    return;
+  }
+  try {
+    const students = await getQuizRecoveryStudents(campus, subject, semester, scope);
+    res.json(students.map(withQuizSpi));
+  } catch (err) {
+    req.log.error({ err }, "Error fetching quiz recovery students");
+    res.status(500).json({ error: "Failed to fetch quiz recovery students" });
   }
 });
 

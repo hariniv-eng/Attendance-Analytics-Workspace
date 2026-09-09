@@ -33,7 +33,7 @@ export function SubNav({ items }: { items: SubNavItem[] }) {
         const active = isActive(item);
         return (
           <button
-            key={item.href}
+            key={item.label}
             type="button"
             onClick={() => setLocation(item.href)}
             className={cn(
@@ -57,3 +57,33 @@ export const ATTENDANCE_STATS_NAV: SubNavItem[] = [
   { label: "Attendance Stats", href: "/dashboard/attendance-stats" },
   { label: "Campus-wise Stats", href: "/dashboard/attendance-stats/campuses" },
 ];
+
+export function attendanceStatsNav(
+  statsHref: string,
+  campusesHref: string,
+): SubNavItem[] {
+  return [
+    { label: "Attendance Stats", href: statsHref },
+    { label: "Campus-wise Stats", href: campusesHref },
+  ];
+}
+
+export function recoveryListPath(
+  tab: "attendance" | "quiz",
+  campus?: string,
+  semester?: string,
+): string {
+  const path = tab === "quiz" ? "/dashboard/recovery/quiz" : "/dashboard/recovery";
+  const params = new URLSearchParams();
+  if (campus) params.set("campus", campus);
+  if (semester) params.set("semester", semester);
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
+}
+
+export function recoveryNav(campus?: string, semester?: string): SubNavItem[] {
+  return [
+    { label: "Attendance", href: recoveryListPath("attendance", campus, semester) },
+    { label: "C.Q + M.Q", href: recoveryListPath("quiz", campus, semester) },
+  ];
+}

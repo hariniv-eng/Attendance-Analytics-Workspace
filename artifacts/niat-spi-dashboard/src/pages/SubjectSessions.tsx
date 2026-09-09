@@ -26,6 +26,14 @@ import { pctColor, pctTextColor } from "@/lib/utils";
 import { useDebounceValue } from "@/hooks/useDebounceValue";
 import { useQueryParams } from "@/hooks/useQueryParams";
 import { exportCsv } from "@/lib/csv";
+import {
+  applyDateRange,
+  attendanceStatsPath,
+  campusWisePath,
+  dateRangeLabel,
+  readDateRange,
+  type DateRange,
+} from "@/lib/dateRange";
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -68,6 +76,7 @@ export default function SubjectSessions() {
   const date = p.get("date") ?? "";
   const from = p.get("from") ?? "";
   const viaCampuses = from === "campuses";
+  const range = useMemo(() => readDateRange(p), [p]);
 
   // Trail back through whichever tab the user drilled in from.
   const baseTrail = useMemo(() => {
@@ -75,13 +84,13 @@ export default function SubjectSessions() {
       ? [
           {
             label: "Campus-wise Stats",
-            onClick: () => setLocation("/dashboard/attendance-stats/campuses"),
+            onClick: () => setLocation(campusWisePath(range)),
           },
         ]
       : [
           {
             label: "Student Attendance Stats",
-            onClick: () => setLocation("/dashboard/attendance-stats"),
+            onClick: () => setLocation(attendanceStatsPath(range)),
           },
         ];
     if (campus) {
@@ -90,20 +99,21 @@ export default function SubjectSessions() {
         onClick: () =>
           setLocation(
             viaCampuses
-              ? `/dashboard/attendance-stats/campuses?campus=${encodeURIComponent(campus)}`
-              : `/dashboard/attendance-stats?campus=${encodeURIComponent(campus)}`,
+              ? campusWisePath(range, campus)
+              : attendanceStatsPath(range, campus),
           ),
       });
     }
     return trail;
-  }, [viaCampuses, campus, setLocation]);
+  }, [viaCampuses, campus, range, setLocation]);
 
   const subjectQs = useMemo(() => {
     const p = new URLSearchParams({ subject });
     if (campus) p.set("campus", campus);
     if (from) p.set("from", from);
+    applyDateRange(p, range);
     return p.toString();
-  }, [subject, campus, from]);
+  }, [subject, campus, from, range]);
 
   if (!subject) {
     return (
@@ -115,8 +125,8 @@ export default function SubjectSessions() {
           onClick={() =>
             setLocation(
               viaCampuses
-                ? "/dashboard/attendance-stats/campuses"
-                : "/dashboard/attendance-stats",
+                ? campusWisePath(range)
+                : attendanceStatsPath(range),
             )
           }
         >
@@ -153,12 +163,14 @@ export default function SubjectSessions() {
     <SessionList
       subject={subject}
       campus={campus}
+      range={range}
       trail={baseTrail}
       onOpenSession={(s) => {
         const p = new URLSearchParams({ subject, session: s.sessionTitle });
         if (campus) p.set("campus", campus);
         if (s.date) p.set("date", s.date);
         if (from) p.set("from", from);
+        applyDateRange(p, range);
         setLocation(`/dashboard/attendance-stats/sessions?${p.toString()}`);
       }}
     />
@@ -168,11 +180,13 @@ export default function SubjectSessions() {
 function SessionList({
   subject,
   campus,
+  range,
   trail,
   onOpenSession,
 }: {
   subject: string;
   campus: string;
+  range: DateRange;
   trail: { label: string; onClick: () => void }[];
   onOpenSession: (s: SessionSummary) => void;
 }) {
@@ -187,7 +201,7 @@ function SessionList({
   useEffect(() => {
     setPage(1);
     setSearch("");
-  }, [subject, campus]);
+  }, [subject, campus, range.dateFrom, range.dateTo]);
 
   useEffect(() => {
     let alive = true;
@@ -195,6 +209,7 @@ function SessionList({
     setFetchError(false);
     const p = new URLSearchParams({ subject });
     if (campus) p.set("campus", campus);
+    applyDateRange(p, range);
     fetch(`/api/dashboard/sessions?${p.toString()}`, {
       credentials: "include",
     })
@@ -214,7 +229,7 @@ function SessionList({
     return () => {
       alive = false;
     };
-  }, [subject, campus]);
+  }, [subject, campus, range.dateFrom, range.dateTo]);
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
@@ -257,8 +272,8 @@ function SessionList({
         title={subject}
         subtitle={
           campus
-            ? `Unit-wise attendance at ${campus} — click a session to see who attended.`
-            : "Unit-wise attendance — click a session to see who attended."
+            ? `Unit-wise attendance at ${campus} · ${dateRangeLabel(range)} — click a session to see who attended.`
+            : `Unit-wise attendance · ${dateRangeLabel(range)} — click a session to see who attended.`
         }
         right={
           <div className="flex flex-wrap items-center gap-2">
@@ -301,6 +316,8 @@ function SessionList({
           <p className="mt-0.5 text-xs text-gray-500">
             {filtered.length.toLocaleString()} session
             {filtered.length === 1 ? "" : "s"}
+            {" · "}
+            {dateRangeLabel(range)}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -328,7 +345,7 @@ function SessionList({
               ) : paged.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-32 text-center text-gray-500">
-                    No sessions found for this subject.
+                    No sessions found for this subject in the selected dates.
                   </TableCell>
                 </TableRow>
               ) : (

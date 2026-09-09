@@ -188,6 +188,126 @@ export const FetchStudentQuizzesResponse = zod.object({
 
 
 /**
+ * @summary List available recovery semesters for a campus
+ */
+export const ListRecoverySemestersQueryParams = zod.object({
+  "campus": zod.coerce.string()
+})
+
+export const ListRecoverySemestersResponseItem = zod.string()
+export const ListRecoverySemestersResponse = zod.array(ListRecoverySemestersResponseItem)
+
+
+/**
+ * @summary List subjects requiring recovery for a campus and semester
+ */
+export const ListRecoverySubjectsQueryParams = zod.object({
+  "campus": zod.coerce.string(),
+  "semester": zod.coerce.string().optional()
+})
+
+export const ListRecoverySubjectsResponse = zod.object({
+  "campus": zod.string(),
+  "subjects": zod.array(zod.object({
+  "subjectTitle": zod.string(),
+  "attendancePct": zod.number(),
+  "studentsBelow80Count": zod.number(),
+  "students": zod.array(zod.object({
+  "studentId": zod.string(),
+  "studentName": zod.string(),
+  "sectionName": zod.string().nullable(),
+  "attendancePct": zod.number(),
+  "presentCount": zod.number(),
+  "totalCount": zod.number()
+}))
+})),
+  "totalSubjectsInRecovery": zod.number(),
+  "totalStudentsInRecovery": zod.number()
+})
+
+
+/**
+ * @summary List students requiring recovery for a subject and semester
+ */
+export const ListRecoveryStudentsQueryParams = zod.object({
+  "campus": zod.coerce.string(),
+  "semester": zod.coerce.string(),
+  "subject": zod.coerce.string()
+})
+
+export const ListRecoveryStudentsResponseItem = zod.object({
+  "studentId": zod.string(),
+  "studentName": zod.string(),
+  "sectionName": zod.string().nullable(),
+  "attendancePct": zod.number(),
+  "presentCount": zod.number(),
+  "totalCount": zod.number()
+})
+export const ListRecoveryStudentsResponse = zod.array(ListRecoveryStudentsResponseItem)
+
+
+/**
+ * @summary List subjects whose students attend ≥80% but are not at 100% on C.Q or M.Q
+ */
+export const ListQuizRecoverySubjectsQueryParams = zod.object({
+  "campus": zod.coerce.string(),
+  "semester": zod.coerce.string().optional()
+})
+
+export const ListQuizRecoverySubjectsResponse = zod.object({
+  "campus": zod.string(),
+  "subjects": zod.array(zod.object({
+  "subjectTitle": zod.string(),
+  "studentsNotAt100Count": zod.number(),
+  "students": zod.array(zod.object({
+  "studentId": zod.string(),
+  "studentName": zod.string(),
+  "sectionName": zod.string().nullable(),
+  "attendancePct": zod.number(),
+  "presentCount": zod.number(),
+  "totalCount": zod.number(),
+  "classroomAvg": zod.number().nullable(),
+  "classroomCompleted": zod.number(),
+  "classroomTotal": zod.number(),
+  "moduleAvg": zod.number().nullable(),
+  "moduleCompleted": zod.number(),
+  "moduleTotal": zod.number(),
+  "spiPath": zod.string()
+}))
+})),
+  "totalSubjectsInRecovery": zod.number(),
+  "totalStudentsInRecovery": zod.number()
+})
+
+
+/**
+ * @summary List students at ≥80% attendance who are not at 100% on C.Q or M.Q
+ */
+export const ListQuizRecoveryStudentsQueryParams = zod.object({
+  "campus": zod.coerce.string(),
+  "semester": zod.coerce.string(),
+  "subject": zod.coerce.string()
+})
+
+export const ListQuizRecoveryStudentsResponseItem = zod.object({
+  "studentId": zod.string(),
+  "studentName": zod.string(),
+  "sectionName": zod.string().nullable(),
+  "attendancePct": zod.number(),
+  "presentCount": zod.number(),
+  "totalCount": zod.number(),
+  "classroomAvg": zod.number().nullable(),
+  "classroomCompleted": zod.number(),
+  "classroomTotal": zod.number(),
+  "moduleAvg": zod.number().nullable(),
+  "moduleCompleted": zod.number(),
+  "moduleTotal": zod.number(),
+  "spiPath": zod.string()
+})
+export const ListQuizRecoveryStudentsResponse = zod.array(ListQuizRecoveryStudentsResponseItem)
+
+
+/**
  * @summary Get scoped dashboard summary
  */
 export const GetDashboardSummaryResponse = zod.object({
@@ -233,6 +353,29 @@ export const GetDashboardSummaryResponse = zod.object({
 
 
 /**
+ * @summary Get the ordered production curriculum and completion state for a subject
+ */
+export const GetSubjectProdSequenceQueryParams = zod.object({
+  "campus": zod.coerce.string(),
+  "subject": zod.coerce.string(),
+  "semester": zod.coerce.string().optional()
+})
+
+export const GetSubjectProdSequenceResponseItem = zod.object({
+  "sessionId": zod.string(),
+  "order": zod.number(),
+  "week": zod.number().nullable(),
+  "topicTitle": zod.string(),
+  "sessionType": zod.string().nullable(),
+  "completed": zod.boolean(),
+  "completedAt": zod.coerce.date().nullable(),
+  "completedSections": zod.number(),
+  "totalSections": zod.number()
+})
+export const GetSubjectProdSequenceResponse = zod.array(GetSubjectProdSequenceResponseItem)
+
+
+/**
  * @summary Live campus and section filter options (role-scoped, from BigQuery)
  */
 export const GetDashboardFiltersQueryParams = zod.object({
@@ -255,7 +398,9 @@ export const GetDashboardStudentsQueryParams = zod.object({
   "campus": zod.coerce.string().optional(),
   "section": zod.coerce.string().optional(),
   "subject": zod.coerce.string().optional().describe('Filter by subject title (subject-wise attendance)'),
-  "attendanceBand": zod.coerce.string().optional().describe('all | below50 | below80 | above80')
+  "attendanceBand": zod.coerce.string().optional().describe('all | below50 | below80 | above80'),
+  "dateFrom": zod.date().optional().describe('Inclusive start date (YYYY-MM-DD) for attendance stats. Empty means start of current semester.'),
+  "dateTo": zod.date().optional().describe('Inclusive end date (YYYY-MM-DD) for attendance stats. Empty means today \/ end of semester.')
 })
 
 export const GetDashboardStudentsResponseItem = zod.object({
@@ -603,3 +748,5 @@ export const UpdateProfileResponse = zod.object({
   "isActive": zod.boolean().optional(),
   "lastLoginAt": zod.string().nullish()
 })
+
+

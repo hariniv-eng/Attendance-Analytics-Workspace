@@ -179,34 +179,32 @@ function CampusList({
     <>
       <PageHeader
         title="Campus-wise Stats"
-        subtitle={`Attendance rolled up by campus · ${dateRangeLabel(range)} — click a row to view its subjects.`}
-        right={
-          <div className="flex flex-wrap items-center gap-2">
-            <DateRangeFilter value={range} onChange={onRangeChange} />
-            <div className="relative min-w-[200px] sm:w-64">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                placeholder="Search campuses…"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9 border-gray-200 pl-9"
-              />
-            </div>
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-            <Button
-              variant="outline"
-              className="h-9 gap-2 border-gray-200"
-              onClick={handleExport}
-              disabled={filtered.length === 0 || loading}
-            >
-              <Download className="h-4 w-4" /> Export
-            </Button>
-          </div>
-        }
+        subtitle="Attendance rolled up by campus — click a row to view its subjects."
       />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <DateRangeFilter value={range} onChange={onRangeChange} />
+        <div className="relative min-w-[200px] sm:w-64">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            placeholder="Search campuses…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="h-9 border-gray-200 pl-9"
+          />
+        </div>
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+        <Button
+          variant="outline"
+          className="h-9 gap-2 border-gray-200"
+          onClick={handleExport}
+          disabled={filtered.length === 0 || loading}
+        >
+          <Download className="h-4 w-4" /> Export
+        </Button>
+      </div>
 
       {fetchError && (
         <div className="mb-4">
@@ -457,50 +455,48 @@ function CampusSubjects({
 
       <PageHeader
         title={campus}
-        subtitle={`Session-wise attendance by subject · ${dateRangeLabel(range)} — click a row to see which students missed it.`}
-        right={
-          <div className="flex flex-wrap items-center gap-2">
-            <DateRangeFilter value={range} onChange={onRangeChange} />
-            {subjectOptions.length > 0 && (
-              <SearchableSelect
-                value={subjectFilter}
-                onValueChange={(v) => {
-                  setSubjectFilter(v);
-                  setPage(1);
-                }}
-                options={[
-                  { value: "all", label: "All subjects" },
-                  ...subjectOptions.map((s) => ({ value: s, label: s })),
-                ]}
-                placeholder="All subjects"
-                searchPlaceholder="Search subjects…"
-                className="w-[220px]"
-              />
-            )}
-            <div className="relative min-w-[200px] sm:w-64">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                placeholder="Search sessions…"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9 border-gray-200 pl-9"
-              />
-            </div>
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-            <Button
-              variant="outline"
-              className="h-9 gap-2 border-gray-200"
-              onClick={handleExport}
-              disabled={filtered.length === 0 || loading}
-            >
-              <Download className="h-4 w-4" /> Export
-            </Button>
-          </div>
-        }
+        subtitle="Session-wise attendance by subject — click a row to see which students missed it."
       />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <DateRangeFilter value={range} onChange={onRangeChange} />
+        {subjectOptions.length > 0 && (
+          <SearchableSelect
+            value={subjectFilter}
+            onValueChange={(v) => {
+              setSubjectFilter(v);
+              setPage(1);
+            }}
+            options={[
+              { value: "all", label: "All subjects" },
+              ...subjectOptions.map((s) => ({ value: s, label: s })),
+            ]}
+            placeholder="All subjects"
+            searchPlaceholder="Search subjects…"
+            className="w-[220px]"
+          />
+        )}
+        <div className="relative min-w-[200px] sm:w-64">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            placeholder="Search sessions…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="h-9 border-gray-200 pl-9"
+          />
+        </div>
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+        <Button
+          variant="outline"
+          className="h-9 gap-2 border-gray-200"
+          onClick={handleExport}
+          disabled={filtered.length === 0 || loading}
+        >
+          <Download className="h-4 w-4" /> Export
+        </Button>
+      </div>
 
       {fetchError && (
         <div className="mb-4">

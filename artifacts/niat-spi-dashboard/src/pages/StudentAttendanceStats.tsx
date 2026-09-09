@@ -200,44 +200,42 @@ export default function StudentAttendanceStats() {
 
       <PageHeader
         title="Student Attendance Stats"
-        subtitle={`Subject-wise attendance · ${dateRangeLabel(range)} — click a row to view students in that subject.`}
-        right={
-          <div className="flex flex-wrap items-center gap-2">
-            <DateRangeFilter value={range} onChange={setRange} />
-            {!isBoa && campusOptions.length > 0 && (
-              <SearchableSelect
-                value={campus}
-                onValueChange={setCampusFilter}
-                options={campusSelectOptions(campusOptions)}
-                placeholder="All campuses"
-                searchPlaceholder="Search campuses…"
-                className="w-[220px]"
-              />
-            )}
-            <div className="relative min-w-[200px] sm:w-64">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                placeholder="Search subjects…"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="h-9 border-gray-200 pl-9"
-              />
-            </div>
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
-            <Button
-              variant="outline"
-              className="h-9 gap-2 border-gray-200"
-              onClick={handleExport}
-              disabled={filtered.length === 0 || loading}
-            >
-              <Download className="h-4 w-4" /> Export
-            </Button>
-          </div>
-        }
+        subtitle="Subject-wise attendance — click a row to view students in that subject."
       />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <DateRangeFilter value={range} onChange={setRange} />
+        {!isBoa && campusOptions.length > 0 && (
+          <SearchableSelect
+            value={campus}
+            onValueChange={setCampusFilter}
+            options={campusSelectOptions(campusOptions)}
+            placeholder="All campuses"
+            searchPlaceholder="Search campuses…"
+            className="w-[220px]"
+          />
+        )}
+        <div className="relative min-w-[200px] sm:w-64">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            placeholder="Search subjects…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="h-9 border-gray-200 pl-9"
+          />
+        </div>
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-gray-400" />}
+        <Button
+          variant="outline"
+          className="h-9 gap-2 border-gray-200"
+          onClick={handleExport}
+          disabled={filtered.length === 0 || loading}
+        >
+          <Download className="h-4 w-4" /> Export
+        </Button>
+      </div>
 
       {fetchError && (
         <div className="mb-4">

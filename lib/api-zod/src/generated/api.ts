@@ -255,7 +255,9 @@ export const GetDashboardStudentsQueryParams = zod.object({
   "campus": zod.coerce.string().optional(),
   "section": zod.coerce.string().optional(),
   "subject": zod.coerce.string().optional().describe('Filter by subject title (subject-wise attendance)'),
-  "attendanceBand": zod.coerce.string().optional().describe('all | below50 | below80 | above80')
+  "attendanceBand": zod.coerce.string().optional().describe('all | below50 | below80 | above80'),
+  "dateFrom": zod.coerce.string().optional().describe('Inclusive start date (YYYY-MM-DD) for attendance stats. Empty means start of current semester.'),
+  "dateTo": zod.coerce.string().optional().describe('Inclusive end date (YYYY-MM-DD) for attendance stats. Empty means today / end of semester.')
 })
 
 export const GetDashboardStudentsResponseItem = zod.object({

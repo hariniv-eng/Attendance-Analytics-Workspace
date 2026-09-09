@@ -19,4 +19,12 @@ subject?: string;
  * all | below50 | below80 | above80
  */
 attendanceBand?: string;
+/**
+ * Inclusive start date (YYYY-MM-DD) for attendance stats. Empty means start of current semester.
+ */
+dateFrom?: string;
+/**
+ * Inclusive end date (YYYY-MM-DD) for attendance stats. Empty means today / end of semester.
+ */
+dateTo?: string;
 };

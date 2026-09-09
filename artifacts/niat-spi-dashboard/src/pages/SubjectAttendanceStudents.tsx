@@ -28,6 +28,12 @@ import { pctTextColor } from "@/lib/utils";
 import { useDebounceValue } from "@/hooks/useDebounceValue";
 import { useQueryParams } from "@/hooks/useQueryParams";
 import { exportCsv } from "@/lib/csv";
+import {
+  attendanceStatsPath,
+  campusWisePath,
+  dateRangeLabel,
+  readDateRange,
+} from "@/lib/dateRange";
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -41,6 +47,7 @@ export default function SubjectAttendanceStudents() {
   // "campuses" when reached via Campus-wise Stats, so the trail leads back
   // there instead of to the flat Attendance Stats list.
   const from = params.get("from") ?? "";
+  const range = useMemo(() => readDateRange(params), [params]);
 
   const viaCampuses = from === "campuses";
 
@@ -48,16 +55,13 @@ export default function SubjectAttendanceStudents() {
     ? [
         {
           label: "Campus-wise Stats",
-          onClick: () => setLocation("/dashboard/attendance-stats/campuses"),
+          onClick: () => setLocation(campusWisePath(range)),
         },
         ...(campus !== "all"
           ? [
               {
                 label: campus,
-                onClick: () =>
-                  setLocation(
-                    `/dashboard/attendance-stats/campuses?campus=${encodeURIComponent(campus)}`,
-                  ),
+                onClick: () => setLocation(campusWisePath(range, campus)),
               },
             ]
           : []),
@@ -65,16 +69,13 @@ export default function SubjectAttendanceStudents() {
     : [
         {
           label: "Student Attendance Stats",
-          onClick: () => setLocation("/dashboard/attendance-stats"),
+          onClick: () => setLocation(attendanceStatsPath(range)),
         },
         ...(campus !== "all"
           ? [
               {
                 label: campus,
-                onClick: () =>
-                  setLocation(
-                    `/dashboard/attendance-stats?campus=${encodeURIComponent(campus)}`,
-                  ),
+                onClick: () => setLocation(attendanceStatsPath(range, campus)),
               },
             ]
           : []),
@@ -83,7 +84,7 @@ export default function SubjectAttendanceStudents() {
   useEffect(() => {
     setPage(1);
     setSearch("");
-  }, [subject, campus]);
+  }, [subject, campus, range.dateFrom, range.dateTo]);
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounceValue(search, 350);
@@ -95,6 +96,8 @@ export default function SubjectAttendanceStudents() {
     subject: subject || undefined,
     campus: campus !== "all" ? campus : undefined,
     search: debouncedSearch || undefined,
+    dateFrom: range.dateFrom,
+    dateTo: range.dateTo,
   };
 
   const { data: students, isLoading, isFetching } = useGetDashboardStudents(
@@ -141,8 +144,8 @@ export default function SubjectAttendanceStudents() {
           onClick={() =>
             setLocation(
               viaCampuses
-                ? "/dashboard/attendance-stats/campuses"
-                : "/dashboard/attendance-stats",
+                ? campusWisePath(range)
+                : attendanceStatsPath(range),
             )
           }
         >
@@ -164,8 +167,8 @@ export default function SubjectAttendanceStudents() {
         title={subject}
         subtitle={
           campus !== "all"
-            ? `Students enrolled in this subject at ${campus}.`
-            : "Students enrolled in this subject across your scope."
+            ? `Students enrolled in this subject at ${campus} · ${dateRangeLabel(range)}.`
+            : `Students enrolled in this subject across your scope · ${dateRangeLabel(range)}.`
         }
         right={
           <div className="flex flex-wrap items-center gap-2">

@@ -33,7 +33,7 @@ export function SubNav({ items }: { items: SubNavItem[] }) {
         const active = isActive(item);
         return (
           <button
-            key={item.href}
+            key={item.label}
             type="button"
             onClick={() => setLocation(item.href)}
             className={cn(
@@ -57,3 +57,13 @@ export const ATTENDANCE_STATS_NAV: SubNavItem[] = [
   { label: "Attendance Stats", href: "/dashboard/attendance-stats" },
   { label: "Campus-wise Stats", href: "/dashboard/attendance-stats/campuses" },
 ];
+
+export function attendanceStatsNav(
+  statsHref: string,
+  campusesHref: string,
+): SubNavItem[] {
+  return [
+    { label: "Attendance Stats", href: statsHref },
+    { label: "Campus-wise Stats", href: campusesHref },
+  ];
+}

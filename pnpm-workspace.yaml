@@ -95,7 +95,10 @@ overrides:
   "esbuild>@esbuild/sunos-x64": "-"
   "esbuild>@esbuild/win32-arm64": "-"
   "esbuild>@esbuild/win32-ia32": "-"
-  "esbuild>@esbuild/win32-x64": "-"
+  # win32-x64 is NOT excluded: local Windows dev machines need this esbuild
+  # binary to run `pnpm run build` (and anything that depends on it, like
+  # the recovery-curriculum seed/sync scripts). Only Replit's deploy target
+  # (linux-x64) is assumed for the other exclusions in this override block.
   "esbuild>@esbuild/aix-ppc64": '-'
   "esbuild>@esbuild/android-arm": '-'
   "esbuild>@esbuild/android-arm64": '-'

@@ -20,6 +20,8 @@ async function buildAll() {
       path.resolve(artifactDir, "src/migrate-from-mongo.ts"),
       path.resolve(artifactDir, "src/seed.ts"),
       path.resolve(artifactDir, "src/seed-recovery.ts"),
+      path.resolve(artifactDir, "src/sync-recovery-curriculum.ts"),
+      path.resolve(artifactDir, "src/reset-cdu-recovery-data.ts"),
     ],
     platform: "node",
     bundle: true,

@@ -37,6 +37,15 @@ const ATTENDANCE_TABLE =
   "`kossip-helpers.niat_post_onboarding_engagement_ai_analytics_workspace.z_niat_student_session_wise_attendance_details`";
 const QUIZ_TABLE =
   "`kossip-helpers.niat_post_onboarding_engagement_ai_analytics_workspace.z_niat_students_classroom_and_module_quiz_details`";
+/**
+ * The live prod curriculum/schedule: one row per section per scheduled
+ * session (lecture, exam, practice, ...), with delivery status. This is the
+ * source of truth for the recovery "broad sequence" — no more hand-typed
+ * curriculum lists. It has no subject column of its own, so callers join it
+ * to ATTENDANCE_TABLE on session_section_id to recover subject_title.
+ */
+const PROD_SEQUENCE_TABLE =
+  "`kossip-helpers.niat_post_onboarding_engagement_ai_analytics_workspace.z_niat_institute_wise_daily_scheduled_session_details`";
 
 function scopeClause(
   scope: SessionScope,
@@ -987,6 +996,76 @@ export interface RecoveryTopicAttendance {
   totalCount: number;
 }
 
+export interface ProdSequenceTopic {
+  subjectTitle: string;
+  topicTitle: string;
+  firstDate: string;
+  delivered: boolean;
+}
+
+/**
+ * Every distinct lecture BigQuery has ever scheduled for a campus, grouped by
+ * subject and ordered by the date it was first scheduled — the actual prod
+ * delivery order, which is also the order recovery re-teaches them in.
+ * `delivered` is true once at least one section has that session marked
+ * COMPLETED.
+ */
+export async function getProdSequence(
+  campus: string,
+): Promise<ProdSequenceTopic[]> {
+  const rows = await bqQuery<{
+    subject_title: string;
+    topic_title: string;
+    first_date: string;
+    delivered: string;
+  }>(
+    `SELECT
+      att.subject_title AS subject_title,
+      sched.session_name AS topic_title,
+      MIN(sched.session_date) AS first_date,
+      MAX(IF(sched.session_status = 'COMPLETED', 1, 0)) AS delivered
+    FROM ${PROD_SEQUENCE_TABLE} sched
+    JOIN ${ATTENDANCE_TABLE} att
+      ON sched.session_section_id = att.session_section_id
+    WHERE sched.institute_name = @campus
+      AND att.institute_name = @campus
+      AND sched.session_type = 'LECTURE'
+    GROUP BY subject_title, topic_title
+    ORDER BY subject_title, first_date`,
+    { campus },
+  );
+  return rows.map((r) => ({
+    subjectTitle: r.subject_title,
+    topicTitle: r.topic_title,
+    firstDate: r.first_date,
+    delivered: String(r.delivered) === "1",
+  }));
+}
+
+/**
+ * Session titles BigQuery has actually marked COMPLETED for one campus and
+ * subject right now. Lets the session tracker gate "not_taught" on real
+ * delivery status instead of only on attendance rows existing.
+ */
+export async function getDeliveredTopicTitles(
+  campus: string,
+  subjectTitle: string,
+): Promise<Set<string>> {
+  const rows = await bqQuery<{ session_name: string }>(
+    `SELECT DISTINCT sched.session_name AS session_name
+     FROM ${PROD_SEQUENCE_TABLE} sched
+     JOIN ${ATTENDANCE_TABLE} att
+       ON sched.session_section_id = att.session_section_id
+     WHERE sched.institute_name = @campus
+       AND att.institute_name = @campus
+       AND att.subject_title = @subjectTitle
+       AND sched.session_type = 'LECTURE'
+       AND sched.session_status = 'COMPLETED'`,
+    { campus, subjectTitle },
+  );
+  return new Set(rows.map((r) => r.session_name));
+}
+
 export async function getResolvedRecoverySessionTitles(
   campus: string,
   subject: string,
@@ -1012,6 +1091,12 @@ export async function getSessionTracker(
   subject: string,
   attendanceByTitle: ReadonlyMap<string, RecoveryTopicAttendance>,
   section?: string,
+  /**
+   * Session titles BigQuery has marked COMPLETED (see getDeliveredTopicTitles).
+   * When omitted, "delivered" falls back to attendance rows existing, which
+   * is how this behaved before the prod sequence table was available.
+   */
+  deliveredTitles?: ReadonlySet<string>,
 ): Promise<SessionTrackerRow[]> {
   const topics = await db
     .select({
@@ -1111,6 +1196,12 @@ export async function getSessionTracker(
       ? attendanceByTitle.get(topic.bigquerySessionTitle)
       : undefined;
     const hasAttendance = Boolean(attendance && attendance.totalCount > 0);
+    const delivered = deliveredTitles
+      ? Boolean(
+          topic.bigquerySessionTitle &&
+            deliveredTitles.has(topic.bigquerySessionTitle),
+        )
+      : hasAttendance;
     const attendancePct =
       attendance && attendance.totalCount > 0
         ? Math.round(
@@ -1120,7 +1211,7 @@ export async function getSessionTracker(
     const progressStatus = progressByTopic.get(topic.id)?.status;
 
     let status: SessionTrackerStatus;
-    if (!hasAttendance || attendancePct === null) {
+    if (!delivered || attendancePct === null) {
       status = "not_taught";
     } else if (attendancePct >= 80) {
       status = "ok";

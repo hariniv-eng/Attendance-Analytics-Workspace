@@ -13,6 +13,7 @@ import {
   getRecoveryProgress,
   getResolvedRecoverySessionTitles,
   getSessionTracker,
+  getDeliveredTopicTitles,
 } from "../lib/queries.js";
 import { REQUIRED_PCT } from "../lib/rbac.js";
 import { cacheGet, cacheSet } from "../lib/cache.js";
@@ -545,13 +546,14 @@ router.get(
     }
 
     try {
-      const [sessions, trackedSessionTitles] = await Promise.all([
+      const [sessions, trackedSessionTitles, deliveredTitles] = await Promise.all([
         getSubjectSessions(scope, {
           subject: bigQuerySubject,
           campus,
           section,
         }),
         getResolvedRecoverySessionTitles(campus, curriculumSubject),
+        getDeliveredTopicTitles(campus, bigQuerySubject),
       ]);
       const attendanceByTitle = new Map<
         string,
@@ -573,6 +575,7 @@ router.get(
         curriculumSubject,
         attendanceByTitle,
         section,
+        deliveredTitles,
       );
       cacheSet(cacheKey, tracker, 60 * 1000);
       res.json(tracker);

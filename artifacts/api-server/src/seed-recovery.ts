@@ -510,9 +510,14 @@ async function seedDeliveredSessions() {
 }
 
 async function main() {
-  await seedCurriculum();
+  // Curriculum and delivered-session seeding (seedCurriculum,
+  // seedDeliveredSessions above) is deprecated: that was hand-typed test
+  // data used to work out the recovery-tracker logic before BigQuery had a
+  // prod sequence table. The curriculum now comes live from BigQuery via
+  // `pnpm --filter @workspace/api-server run sync:recovery-curriculum`.
+  // Only the campus instructor roster — real operational data — still seeds
+  // here.
   await seedCampusInstructors();
-  await seedDeliveredSessions();
 
   const [summary] = await db
     .select({

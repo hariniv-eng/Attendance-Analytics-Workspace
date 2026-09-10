@@ -38,15 +38,6 @@ const ATTENDANCE_TABLE =
   "`kossip-helpers.niat_post_onboarding_engagement_ai_analytics_workspace.z_niat_student_session_wise_attendance_details`";
 const QUIZ_TABLE =
   "`kossip-helpers.niat_post_onboarding_engagement_ai_analytics_workspace.z_niat_students_classroom_and_module_quiz_details`";
-/**
- * The live prod curriculum/schedule: one row per section per scheduled
- * session (lecture, exam, practice, ...), with delivery status. This is the
- * source of truth for the recovery "broad sequence" — no more hand-typed
- * curriculum lists. It has no subject column of its own, so callers join it
- * to ATTENDANCE_TABLE on session_section_id to recover subject_title.
- */
-const INSTITUTE_SCHEDULE_TABLE =
-  "`kossip-helpers.niat_post_onboarding_engagement_ai_analytics_workspace.z_niat_institute_wise_daily_scheduled_session_details`";
 
 function scopeClause(
   scope: SessionScope,
@@ -1183,9 +1174,302 @@ const LECTURE_SESSION_EXCLUSIONS = `COALESCE(session_title, '') NOT IN (
           'Module Quiz'
         )`;
 
-/** C.Q / M.Q fail the 100% bar if unfinished or average best score is under 100. */
+/** C.Q / M.Q fail the 100% bar if unfinished or a known average is under 100. Null avg is not treated as 0. */
 function quizFails100Sql(completed: string, total: string, avg: string): string {
-  return `(${total} > 0 AND (${completed} < ${total} OR IFNULL(${avg}, 0) < 100))`;
+  return `(${total} > 0 AND (${completed} < ${total} OR (${avg} IS NOT NULL AND ${avg} < 100)))`;
+}
+
+/**
+ * Classroom and module quiz rows store the attendance subject in different
+ * columns. Match either `semester_course_title` or `course_title`.
+ */
+function quizMatchesSubjectSql(subjectExpr: string, quizAlias = ""): string {
+  const col = quizAlias ? `${quizAlias}.` : "";
+  return `(
+    LOWER(TRIM(CAST(COALESCE(${col}semester_course_title, '') AS STRING))) = LOWER(TRIM(${subjectExpr}))
+    OR LOWER(TRIM(CAST(COALESCE(${col}course_title, '') AS STRING))) = LOWER(TRIM(${subjectExpr}))
+  )`;
+}
+
+/** Prefer semester_course_title, then course_title — CQ and MQ store the subject in different columns. */
+function quizSubjectTitleSql(quizAlias = ""): string {
+  const col = quizAlias ? `${quizAlias}.` : "";
+  return `COALESCE(
+    NULLIF(TRIM(CAST(${col}semester_course_title AS STRING)), ''),
+    NULLIF(TRIM(CAST(${col}course_title AS STRING)), ''),
+    'Unknown'
+  )`;
+}
+
+const QUIZ_PIVOT_SELECT = `SUM(IF(UPPER({a}derived_unit_type) LIKE '%MODULE%', 0,
+          IFNULL(SAFE_CAST({a}total_quizzes AS INT64), 0))) AS cq_total,
+        SUM(IF(UPPER({a}derived_unit_type) LIKE '%MODULE%', 0,
+          IFNULL(SAFE_CAST({a}total_completed_quizzes AS INT64), 0))) AS cq_completed,
+        AVG(IF(UPPER({a}derived_unit_type) LIKE '%MODULE%', NULL,
+          SAFE_CAST({a}avg_best_attempt_percentage_score AS FLOAT64))) AS cq_avg,
+        SUM(IF(UPPER({a}derived_unit_type) LIKE '%MODULE%',
+          IFNULL(SAFE_CAST({a}total_quizzes AS INT64), 0), 0)) AS mq_total,
+        SUM(IF(UPPER({a}derived_unit_type) LIKE '%MODULE%',
+          IFNULL(SAFE_CAST({a}total_completed_quizzes AS INT64), 0), 0)) AS mq_completed,
+        AVG(IF(UPPER({a}derived_unit_type) NOT LIKE '%MODULE%', NULL,
+          SAFE_CAST({a}avg_best_attempt_percentage_score AS FLOAT64))) AS mq_avg`;
+
+function quizPivotSelect(quizAlias = ""): string {
+  const prefix = quizAlias ? `${quizAlias}.` : "";
+  return QUIZ_PIVOT_SELECT.replaceAll("{a}", prefix);
+}
+
+/**
+ * Quiz table has no `is_current_semester` or date column. Scope by campus
+ * and subject only — subject matches either quiz title column.
+ */
+function quizScopeClause(
+  scope: SessionScope,
+  params: Record<string, unknown>,
+  quizAlias = "",
+): string {
+  const col = quizAlias ? `${quizAlias}.` : "";
+  const clauses: string[] = [];
+  if (scope.campuses && scope.campuses.length > 0) {
+    clauses.push(`${col}institute_name IN UNNEST(@campuses)`);
+    params["campuses"] = scope.campuses;
+  }
+  if (scope.subjects && scope.subjects.length > 0) {
+    clauses.push(
+      `(${col}semester_course_title IN UNNEST(@subjects) OR ${col}course_title IN UNNEST(@subjects))`,
+    );
+    params["subjects"] = scope.subjects;
+  }
+  return clauses.length > 0 ? clauses.join(" AND ") : "TRUE";
+}
+
+export interface AssessmentCountRow {
+  classroomCompleted: number;
+  classroomTotal: number;
+  moduleCompleted: number;
+  moduleTotal: number;
+  totalCompleted: number;
+  totalAssigned: number;
+  completionPct: number;
+}
+
+export interface AssessmentCampusItem extends AssessmentCountRow {
+  instituteName: string;
+  studentCount: number;
+}
+
+export interface AssessmentSubjectItem extends AssessmentCountRow {
+  subjectTitle: string;
+  studentCount: number;
+}
+
+export interface AssessmentStudentItem extends AssessmentCountRow {
+  studentId: string;
+  studentName: string;
+  instituteName: string;
+  sectionName: string | null;
+}
+
+function mapAssessmentCounts(row: {
+  cq_completed: string;
+  cq_total: string;
+  mq_completed: string;
+  mq_total: string;
+}): AssessmentCountRow {
+  const classroomCompleted = Number(row.cq_completed ?? 0);
+  const classroomTotal = Number(row.cq_total ?? 0);
+  const moduleCompleted = Number(row.mq_completed ?? 0);
+  const moduleTotal = Number(row.mq_total ?? 0);
+  const totalCompleted = classroomCompleted + moduleCompleted;
+  const totalAssigned = classroomTotal + moduleTotal;
+  return {
+    classroomCompleted,
+    classroomTotal,
+    moduleCompleted,
+    moduleTotal,
+    totalCompleted,
+    totalAssigned,
+    completionPct: pct(totalCompleted, totalAssigned),
+  };
+}
+
+/**
+ * Campus rollup of classroom + module quiz counts.
+ * Campus list matches attendance (current semester), so campuses without
+ * quiz rows still appear with zero counts — same 34 as the dashboard.
+ */
+export async function getAssessmentCampusSummary(
+  scope: SessionScope,
+): Promise<AssessmentCampusItem[]> {
+  const params: Record<string, unknown> = {};
+  const attWhere = scopeClause(scope, params);
+  const quizWhere = quizScopeClause(scope, params);
+  const rows = await bqQuery<{
+    institute_name: string;
+    student_count: string;
+    cq_completed: string;
+    cq_total: string;
+    mq_completed: string;
+    mq_total: string;
+  }>(
+    `WITH campuses AS (
+      SELECT DISTINCT institute_name
+      FROM ${ATTENDANCE_TABLE}
+      WHERE ${attWhere}
+        AND institute_name IS NOT NULL
+        AND TRIM(institute_name) != ''
+    ),
+    quiz AS (
+      SELECT
+        institute_name,
+        COUNT(DISTINCT user_id) AS student_count,
+        ${quizPivotSelect()}
+      FROM ${QUIZ_TABLE}
+      WHERE ${quizWhere}
+        AND institute_name IS NOT NULL
+        AND TRIM(institute_name) != ''
+      GROUP BY institute_name
+    )
+    SELECT
+      campuses.institute_name,
+      IFNULL(quiz.student_count, 0) AS student_count,
+      IFNULL(quiz.cq_completed, 0) AS cq_completed,
+      IFNULL(quiz.cq_total, 0) AS cq_total,
+      IFNULL(quiz.mq_completed, 0) AS mq_completed,
+      IFNULL(quiz.mq_total, 0) AS mq_total
+    FROM campuses
+    LEFT JOIN quiz ON quiz.institute_name = campuses.institute_name
+    ORDER BY campuses.institute_name`,
+    params,
+  );
+  return rows.map((r) => ({
+    instituteName: r.institute_name,
+    studentCount: Number(r.student_count),
+    ...mapAssessmentCounts(r),
+  }));
+}
+
+/** Subject rollup of classroom + module quiz counts at one campus. */
+export async function getAssessmentSubjects(
+  scope: SessionScope,
+  opts: { campus: string },
+): Promise<AssessmentSubjectItem[]> {
+  const params: Record<string, unknown> = { filterCampus: opts.campus };
+  const where = quizScopeClause(scope, params);
+  const subjectTitle = quizSubjectTitleSql();
+  const rows = await bqQuery<{
+    subject_title: string;
+    student_count: string;
+    cq_completed: string;
+    cq_total: string;
+    mq_completed: string;
+    mq_total: string;
+  }>(
+    `SELECT
+      ${subjectTitle} AS subject_title,
+      COUNT(DISTINCT user_id) AS student_count,
+      ${quizPivotSelect()}
+    FROM ${QUIZ_TABLE}
+    WHERE ${where}
+      AND institute_name = @filterCampus
+    GROUP BY subject_title
+    ORDER BY subject_title`,
+    params,
+  );
+  return rows.map((r) => ({
+    subjectTitle: r.subject_title,
+    studentCount: Number(r.student_count),
+    ...mapAssessmentCounts(r),
+  }));
+}
+
+/** Per-student classroom + module quiz counts. Names come from attendance. */
+export async function getAssessmentStudents(
+  scope: SessionScope,
+  opts: {
+    campus?: string;
+    subject?: string;
+    search?: string;
+    limit?: number;
+  } = {},
+): Promise<AssessmentStudentItem[]> {
+  const params: Record<string, unknown> = {};
+  const where = quizScopeClause(scope, params);
+  let extra = "";
+  if (opts.campus) {
+    params["filterCampus"] = opts.campus;
+    extra += " AND institute_name = @filterCampus";
+  }
+  if (opts.subject) {
+    params["subject"] = opts.subject;
+    extra += ` AND ${quizMatchesSubjectSql("@subject")}`;
+  }
+  let searchFilter = "";
+  if (opts.search) {
+    params["q"] = `%${opts.search}%`;
+    searchFilter =
+      "AND (LOWER(COALESCE(names.student_name, '')) LIKE LOWER(@q) OR LOWER(CAST(quiz.user_id AS STRING)) LIKE LOWER(@q))";
+  }
+  const safeLimit = Math.min(opts.limit ?? 2000, 5000);
+  const rows = await bqQuery<{
+    student_user_id: string;
+    student_name: string;
+    institute_name: string;
+    section_name: string | null;
+    cq_completed: string;
+    cq_total: string;
+    mq_completed: string;
+    mq_total: string;
+  }>(
+    `WITH quiz AS (
+      SELECT
+        user_id,
+        ANY_VALUE(institute_name) AS institute_name,
+        ${quizPivotSelect()}
+      FROM ${QUIZ_TABLE}
+      WHERE ${where}${extra}
+      GROUP BY user_id
+    ),
+    names AS (
+      SELECT
+        LOWER(REPLACE(CAST(student_user_id AS STRING), '-', '')) AS student_key,
+        MAX(student_name) AS student_name,
+        MAX(batch_section_name) AS section_name
+      FROM ${ATTENDANCE_TABLE}
+      WHERE student_name IS NOT NULL
+        AND TRIM(student_name) != ''
+      GROUP BY 1
+    )
+    SELECT
+      CAST(quiz.user_id AS STRING) AS student_user_id,
+      COALESCE(names.student_name, '') AS student_name,
+      quiz.institute_name,
+      names.section_name,
+      quiz.cq_completed,
+      quiz.cq_total,
+      quiz.mq_completed,
+      quiz.mq_total
+    FROM quiz
+    LEFT JOIN names
+      ON names.student_key = LOWER(REPLACE(CAST(quiz.user_id AS STRING), '-', ''))
+    WHERE TRUE
+      ${searchFilter}
+    ORDER BY
+      SAFE_DIVIDE(
+        quiz.cq_completed + quiz.mq_completed,
+        quiz.cq_total + quiz.mq_total
+      ) ASC,
+      student_name
+    LIMIT ${safeLimit}`,
+    params,
+  );
+  return rows.map((r) => ({
+    studentId: r.student_user_id,
+    studentName: r.student_name || "Unknown student",
+    instituteName: r.institute_name ?? "",
+    sectionName: r.section_name ?? null,
+    ...mapAssessmentCounts(r),
+  }));
 }
 
 export interface QuizRecoveryStudent {
@@ -1252,8 +1536,9 @@ function mapQuizRecoveryStudent(row: {
 }
 
 /**
- * Students with lecture attendance ≥ 80% whose C.Q or M.Q is not fully
- * completed at 100% average. Skill assessment is not in BigQuery yet.
+ * Students whose C.Q or M.Q is not fully completed at 100%. Attendance is
+ * joined only for name/section and display % — it does not gate the list.
+ * Skill assessment is not in BigQuery yet.
  */
 export async function getCampusQuizRecovery(
   campus: string,
@@ -1261,7 +1546,8 @@ export async function getCampusQuizRecovery(
   semester?: string,
 ): Promise<QuizRecoveryCampusData> {
   const params: Record<string, unknown> = { campus };
-  const where = scopeClause(scope, params, { semester });
+  const attWhere = scopeClause(scope, params, { semester });
+  const quizWhere = quizScopeClause(scope, params, "q");
   const rows = await bqQuery<{
     subject_title: string;
     student_user_id: string;
@@ -1277,7 +1563,19 @@ export async function getCampusQuizRecovery(
     mq_completed: string;
     mq_total: string;
   }>(
-    `WITH att AS (
+    `WITH quiz AS (
+      SELECT
+        ${quizSubjectTitleSql("q")} AS subject_title,
+        q.user_id,
+        ${quizPivotSelect("q")}
+      FROM ${QUIZ_TABLE} q
+      WHERE (q.institute_name = @campus OR q.institute_name IS NULL)
+        AND ${quizWhere}
+      GROUP BY 1, q.user_id
+      HAVING ${quizFails100Sql("cq_completed", "cq_total", "cq_avg")}
+          OR ${quizFails100Sql("mq_completed", "mq_total", "mq_avg")}
+    ),
+    att AS (
       SELECT
         subject_title,
         student_user_id,
@@ -1287,55 +1585,44 @@ export async function getCampusQuizRecovery(
         COUNT(*) AS total_count,
         SAFE_DIVIDE(COUNTIF(LOWER(attendance_status) = 'present'), COUNT(*)) * 100 AS subject_pct
       FROM ${ATTENDANCE_TABLE}
-      WHERE ${where}
+      WHERE ${attWhere}
         AND institute_name = @campus
         AND ${LECTURE_SESSION_EXCLUSIONS}
       GROUP BY subject_title, student_user_id
-      HAVING CAST(subject_pct AS FLOAT64) >= 80
     ),
-    quiz AS (
+    names AS (
       SELECT
-        user_id,
-        COALESCE(NULLIF(TRIM(semester_course_title), ''), course_title) AS subject_title,
-        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%', 0,
-          IFNULL(SAFE_CAST(total_quizzes AS INT64), 0))) AS cq_total,
-        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%', 0,
-          IFNULL(SAFE_CAST(total_completed_quizzes AS INT64), 0))) AS cq_completed,
-        AVG(IF(UPPER(derived_unit_type) LIKE '%MODULE%', NULL,
-          IFNULL(SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), 0))) AS cq_avg,
-        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%',
-          IFNULL(SAFE_CAST(total_quizzes AS INT64), 0), 0)) AS mq_total,
-        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%',
-          IFNULL(SAFE_CAST(total_completed_quizzes AS INT64), 0), 0)) AS mq_completed,
-        AVG(IF(UPPER(derived_unit_type) NOT LIKE '%MODULE%', NULL,
-          IFNULL(SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), 0))) AS mq_avg
-      FROM ${QUIZ_TABLE}
-      WHERE (institute_name = @campus OR institute_name IS NULL)
-      GROUP BY user_id, COALESCE(NULLIF(TRIM(semester_course_title), ''), course_title)
+        student_user_id,
+        MAX(student_name) AS student_name,
+        MAX(batch_section_name) AS batch_section_name
+      FROM ${ATTENDANCE_TABLE}
+      WHERE ${attWhere}
+        AND institute_name = @campus
+      GROUP BY student_user_id
     )
     SELECT
-      att.subject_title,
-      att.student_user_id,
-      att.student_name,
-      att.batch_section_name,
-      att.present_count,
-      att.total_count,
-      att.subject_pct,
+      quiz.subject_title,
+      CAST(quiz.user_id AS STRING) AS student_user_id,
+      COALESCE(att.student_name, names.student_name, 'Unknown student') AS student_name,
+      COALESCE(att.batch_section_name, names.batch_section_name) AS batch_section_name,
+      IFNULL(att.present_count, 0) AS present_count,
+      IFNULL(att.total_count, 0) AS total_count,
+      IFNULL(att.subject_pct, 0) AS subject_pct,
       quiz.cq_avg,
       quiz.cq_completed,
       quiz.cq_total,
       quiz.mq_avg,
       quiz.mq_completed,
       quiz.mq_total
-    FROM att
-    INNER JOIN quiz
+    FROM quiz
+    LEFT JOIN att
       ON LOWER(REPLACE(CAST(quiz.user_id AS STRING), '-', ''))
        = LOWER(REPLACE(CAST(att.student_user_id AS STRING), '-', ''))
-     AND LOWER(TRIM(CAST(quiz.subject_title AS STRING)))
-       = LOWER(TRIM(CAST(att.subject_title AS STRING)))
-    WHERE ${quizFails100Sql("quiz.cq_completed", "quiz.cq_total", "quiz.cq_avg")}
-       OR ${quizFails100Sql("quiz.mq_completed", "quiz.mq_total", "quiz.mq_avg")}
-    ORDER BY att.subject_title, att.student_name`,
+     AND LOWER(TRIM(att.subject_title)) = LOWER(TRIM(quiz.subject_title))
+    LEFT JOIN names
+      ON LOWER(REPLACE(CAST(quiz.user_id AS STRING), '-', ''))
+       = LOWER(REPLACE(CAST(names.student_user_id AS STRING), '-', ''))
+    ORDER BY quiz.subject_title, student_name`,
     params,
   );
 
@@ -1372,7 +1659,8 @@ export async function getQuizRecoveryStudents(
   scope: SessionScope,
 ): Promise<QuizRecoveryStudent[]> {
   const params: Record<string, unknown> = { campus, subject };
-  const where = scopeClause(scope, params, { semester });
+  const attWhere = scopeClause(scope, params, { semester });
+  const quizWhere = quizScopeClause(scope, params);
   const rows = await bqQuery<{
     student_user_id: string;
     student_name: string;
@@ -1387,7 +1675,19 @@ export async function getQuizRecoveryStudents(
     mq_completed: string;
     mq_total: string;
   }>(
-    `WITH att AS (
+    `WITH quiz AS (
+      SELECT
+        user_id,
+        ${quizPivotSelect()}
+      FROM ${QUIZ_TABLE}
+      WHERE (institute_name = @campus OR institute_name IS NULL)
+        AND ${quizMatchesSubjectSql("@subject")}
+        AND ${quizWhere}
+      GROUP BY user_id
+      HAVING ${quizFails100Sql("cq_completed", "cq_total", "cq_avg")}
+          OR ${quizFails100Sql("mq_completed", "mq_total", "mq_avg")}
+    ),
+    att AS (
       SELECT
         student_user_id,
         MAX(student_name) AS student_name,
@@ -1396,54 +1696,43 @@ export async function getQuizRecoveryStudents(
         COUNT(*) AS total_count,
         SAFE_DIVIDE(COUNTIF(LOWER(attendance_status) = 'present'), COUNT(*)) * 100 AS subject_pct
       FROM ${ATTENDANCE_TABLE}
-      WHERE ${where}
+      WHERE ${attWhere}
         AND institute_name = @campus
         AND subject_title = @subject
         AND ${LECTURE_SESSION_EXCLUSIONS}
       GROUP BY student_user_id
-      HAVING CAST(subject_pct AS FLOAT64) >= 80
     ),
-    quiz AS (
+    names AS (
       SELECT
-        user_id,
-        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%', 0,
-          IFNULL(SAFE_CAST(total_quizzes AS INT64), 0))) AS cq_total,
-        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%', 0,
-          IFNULL(SAFE_CAST(total_completed_quizzes AS INT64), 0))) AS cq_completed,
-        AVG(IF(UPPER(derived_unit_type) LIKE '%MODULE%', NULL,
-          IFNULL(SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), 0))) AS cq_avg,
-        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%',
-          IFNULL(SAFE_CAST(total_quizzes AS INT64), 0), 0)) AS mq_total,
-        SUM(IF(UPPER(derived_unit_type) LIKE '%MODULE%',
-          IFNULL(SAFE_CAST(total_completed_quizzes AS INT64), 0), 0)) AS mq_completed,
-        AVG(IF(UPPER(derived_unit_type) NOT LIKE '%MODULE%', NULL,
-          IFNULL(SAFE_CAST(avg_best_attempt_percentage_score AS FLOAT64), 0))) AS mq_avg
-      FROM ${QUIZ_TABLE}
-      WHERE (institute_name = @campus OR institute_name IS NULL)
-        AND LOWER(TRIM(CAST(COALESCE(NULLIF(TRIM(semester_course_title), ''), course_title) AS STRING)))
-          = LOWER(TRIM(@subject))
-      GROUP BY user_id
+        student_user_id,
+        MAX(student_name) AS student_name,
+        MAX(batch_section_name) AS batch_section_name
+      FROM ${ATTENDANCE_TABLE}
+      WHERE ${attWhere}
+        AND institute_name = @campus
+      GROUP BY student_user_id
     )
     SELECT
-      att.student_user_id,
-      att.student_name,
-      att.batch_section_name,
-      att.present_count,
-      att.total_count,
-      att.subject_pct,
+      CAST(quiz.user_id AS STRING) AS student_user_id,
+      COALESCE(att.student_name, names.student_name, 'Unknown student') AS student_name,
+      COALESCE(att.batch_section_name, names.batch_section_name) AS batch_section_name,
+      IFNULL(att.present_count, 0) AS present_count,
+      IFNULL(att.total_count, 0) AS total_count,
+      IFNULL(att.subject_pct, 0) AS subject_pct,
       quiz.cq_avg,
       quiz.cq_completed,
       quiz.cq_total,
       quiz.mq_avg,
       quiz.mq_completed,
       quiz.mq_total
-    FROM att
-    INNER JOIN quiz
+    FROM quiz
+    LEFT JOIN att
       ON LOWER(REPLACE(CAST(quiz.user_id AS STRING), '-', ''))
        = LOWER(REPLACE(CAST(att.student_user_id AS STRING), '-', ''))
-    WHERE ${quizFails100Sql("quiz.cq_completed", "quiz.cq_total", "quiz.cq_avg")}
-       OR ${quizFails100Sql("quiz.mq_completed", "quiz.mq_total", "quiz.mq_avg")}
-    ORDER BY att.student_name`,
+    LEFT JOIN names
+      ON LOWER(REPLACE(CAST(quiz.user_id AS STRING), '-', ''))
+       = LOWER(REPLACE(CAST(names.student_user_id AS STRING), '-', ''))
+    ORDER BY student_name`,
     params,
   );
 
@@ -1505,11 +1794,9 @@ export interface ProdSequenceTopic {
 }
 
 /**
- * Every distinct lecture BigQuery has ever scheduled for a campus, grouped by
- * subject and ordered by the date it was first scheduled — the actual prod
- * delivery order, which is also the order recovery re-teaches them in.
- * `delivered` is true once at least one section has that session marked
- * COMPLETED.
+ * Every distinct completed lecture in the current semester for a campus,
+ * grouped by subject and ordered by the date it was first scheduled — the
+ * actual prod delivery order.
  */
 export async function getProdSequence(
   campus: string,
@@ -1521,16 +1808,15 @@ export async function getProdSequence(
     delivered: string;
   }>(
     `SELECT
-      att.subject_title AS subject_title,
-      sched.session_name AS topic_title,
-      MIN(sched.session_date) AS first_date,
-      MAX(IF(sched.session_status = 'COMPLETED', 1, 0)) AS delivered
-    FROM ${INSTITUTE_SCHEDULE_TABLE} sched
-    JOIN ${ATTENDANCE_TABLE} att
-      ON sched.session_section_id = att.session_section_id
+       sched.course_title AS subject_title,
+       sched.session_title AS topic_title,
+       MIN(sched.session_start_datetime) AS first_date,
+       MAX(IF(sched.session_status = 'COMPLETED', 1, 0)) AS delivered
+     FROM ${PROD_SEQUENCE_TABLE} sched
     WHERE sched.institute_name = @campus
-      AND att.institute_name = @campus
       AND sched.session_type = 'LECTURE'
+       AND sched.session_status = 'COMPLETED'
+       AND sched.is_current_semester = 1
     GROUP BY subject_title, topic_title
     ORDER BY subject_title, first_date`,
     { campus },
@@ -1553,15 +1839,13 @@ export async function getDeliveredTopicTitles(
   subjectTitle: string,
 ): Promise<Set<string>> {
   const rows = await bqQuery<{ session_name: string }>(
-    `SELECT DISTINCT sched.session_name AS session_name
-     FROM ${INSTITUTE_SCHEDULE_TABLE} sched
-     JOIN ${ATTENDANCE_TABLE} att
-       ON sched.session_section_id = att.session_section_id
+    `SELECT DISTINCT sched.session_title AS session_name
+     FROM ${PROD_SEQUENCE_TABLE} sched
      WHERE sched.institute_name = @campus
-       AND att.institute_name = @campus
-       AND att.subject_title = @subjectTitle
+       AND sched.course_title = @subjectTitle
        AND sched.session_type = 'LECTURE'
-       AND sched.session_status = 'COMPLETED'`,
+       AND sched.session_status = 'COMPLETED'
+       AND sched.is_current_semester = 1`,
     { campus, subjectTitle },
   );
   return new Set(rows.map((r) => r.session_name));

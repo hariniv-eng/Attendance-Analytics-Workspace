@@ -45,8 +45,7 @@ const QUIZ_TABLE =
  * curriculum lists. It has no subject column of its own, so callers join it
  * to ATTENDANCE_TABLE on session_section_id to recover subject_title.
  */
-const PROD_SEQUENCE_TABLE =
-  "`kossip-helpers.niat_post_onboarding_engagement_ai_analytics_workspace.z_niat_institute_wise_daily_scheduled_session_details`";
+
 
 function scopeClause(
   scope: SessionScope,
@@ -1505,16 +1504,14 @@ export async function getProdSequence(
     delivered: string;
   }>(
     `SELECT
-      att.subject_title AS subject_title,
-      sched.session_name AS topic_title,
-      MIN(sched.session_date) AS first_date,
-      MAX(IF(sched.session_status = 'COMPLETED', 1, 0)) AS delivered
-    FROM ${PROD_SEQUENCE_TABLE} sched
-    JOIN ${ATTENDANCE_TABLE} att
-      ON sched.session_section_id = att.session_section_id
-    WHERE sched.institute_name = @campus
-      AND att.institute_name = @campus
-      AND sched.session_type = 'LECTURE'
+      course_title AS subject_title,
+      session_title AS topic_title,
+      CAST(MIN(DATE(session_start_datetime)) AS STRING) AS first_date,
+      MAX(IF(UPPER(COALESCE(session_status, '')) = 'COMPLETED', 1, 0)) AS delivered
+    FROM ${PROD_SEQUENCE_TABLE}
+    WHERE institute_name = @campus
+      AND is_current_semester = 1
+      AND session_type = 'LECTURE'
     GROUP BY subject_title, topic_title
     ORDER BY subject_title, first_date`,
     { campus },
@@ -1537,15 +1534,13 @@ export async function getDeliveredTopicTitles(
   subjectTitle: string,
 ): Promise<Set<string>> {
   const rows = await bqQuery<{ session_name: string }>(
-    `SELECT DISTINCT sched.session_name AS session_name
-     FROM ${PROD_SEQUENCE_TABLE} sched
-     JOIN ${ATTENDANCE_TABLE} att
-       ON sched.session_section_id = att.session_section_id
-     WHERE sched.institute_name = @campus
-       AND att.institute_name = @campus
-       AND att.subject_title = @subjectTitle
-       AND sched.session_type = 'LECTURE'
-       AND sched.session_status = 'COMPLETED'`,
+        `SELECT DISTINCT session_title AS session_name
+     FROM ${PROD_SEQUENCE_TABLE}
+     WHERE institute_name = @campus
+       AND course_title = @subjectTitle
+       AND is_current_semester = 1
+       AND session_type = 'LECTURE'
+       AND UPPER(COALESCE(session_status, '')) = 'COMPLETED'`,
     { campus, subjectTitle },
   );
   return new Set(rows.map((r) => r.session_name));

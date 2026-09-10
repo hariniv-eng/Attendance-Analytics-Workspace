@@ -1378,11 +1378,6 @@ export default function RecoverySubjectDetail() {
                             <span className={`inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border ${statusDisplay.className}`}>
                               {statusDisplay.label}
                             </span>
-                            {row.prodStatus === "completed" && (
-                              <span className="mt-1 block text-[11px] font-medium text-blue-700">
-                                Prod completed{row.completedAt ? ` · ${formatRecoveryDate(row.completedAt)}` : ""}
-                              </span>
-                            )}
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap">
                             {row.recoverySession ? (

@@ -918,14 +918,19 @@ export async function getSubjectProdSequence(
   subject: string,
   semester?: string,
   section?: string,
+  sessionType?: string,
 ): Promise<SubjectProdSequenceItem[]> {
   const params: Record<string, unknown> = { campus, subject };
   const semesterClause = semester
     ? "semester_title = @semester"
     : "is_current_semester = 1";
   const sectionClause = section ? "AND section_name = @section" : "";
+  const sessionTypeClause = sessionType
+    ? "AND UPPER(COALESCE(session_type, '')) = UPPER(@sessionType)"
+    : "";
   if (semester) params["semester"] = semester;
   if (section) params["section"] = section;
+  if (sessionType) params["sessionType"] = sessionType;
 
   const rows = await bqQuery<{
     session_id: string;
@@ -961,6 +966,7 @@ export async function getSubjectProdSequence(
        AND course_title = @subject
        AND ${semesterClause}
        ${sectionClause}
+       ${sessionTypeClause}
        AND session_id IS NOT NULL
        AND session_title IS NOT NULL
      GROUP BY session_id
@@ -1780,6 +1786,7 @@ export async function getProdSequenceSessionTracker(
     subject,
     semester,
     section,
+    "LECTURE",
   );
   const recoveryRows = recoverySubject
     ? await getSessionTracker(

@@ -1808,20 +1808,8 @@ export async function getProdSequenceSessionTracker(
           10
         : null;
     const recovery = recoveryByTitle.get(item.topicTitle);
-    let status: SessionTrackerStatus;
-    if (!item.completed) {
-      status = "not_taught";
-    } else if (attendancePct === null) {
-      status = "completed";
-    } else if (attendancePct >= 80) {
-      status = "ok";
-    } else if (recovery?.status === "recovered") {
-      status = "recovered";
-    } else if (recovery?.status === "recovery_scheduled") {
-      status = "recovery_scheduled";
-    } else {
-      status = "needs_recovery";
-    }
+    const status: SessionTrackerStatus =
+      recovery?.status === "recovered" ? "completed" : "needs_recovery";
 
     return {
       sequenceNo: item.order,

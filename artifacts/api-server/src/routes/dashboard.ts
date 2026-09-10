@@ -11,10 +11,8 @@ import {
   getSessionStudents,
   getCampusSessions,
   getSubjectProdSequence,
+  getProdSequenceSessionTracker,
   getRecoveryProgress,
-  getResolvedRecoverySessionTitles,
-  getSessionTracker,
-  getDeliveredTopicTitles,
   parseDateRange,
   dateRangeCacheKey,
 } from "../lib/queries.js";
@@ -417,14 +415,10 @@ router.get(
       return;
     }
 
-    const curriculumSubject =
-      BIGQUERY_TO_CURRICULUM_SUBJECT[bigQuerySubject];
-    if (!curriculumSubject) {
-      res.status(404).json({ error: "Recovery curriculum not configured for this subject" });
-      return;
-    }
+    const semester = q["semester"] || undefined;
+    const recoverySubject = BIGQUERY_TO_CURRICULUM_SUBJECT[bigQuerySubject];
 
-    const cacheKey = `recovery-progress:${session.role}:${JSON.stringify(scope)}:${campus}:${bigQuerySubject}`;
+    const cacheKey = `recovery-progress:${session.role}:${JSON.stringify(scope)}:${campus}:${bigQuerySubject}:${semester ?? ""}`;
     const cached = cacheGet<object>(cacheKey);
     if (cached) {
       res.json(cached);
@@ -432,19 +426,19 @@ router.get(
     }
 
     try {
-      const [sessions, trackedSessionTitles] = await Promise.all([
+      const [sessions, prodSequence] = await Promise.all([
         getSubjectSessions(scope, {
           subject: bigQuerySubject,
           campus,
+          semester,
         }),
-        getResolvedRecoverySessionTitles(campus, curriculumSubject),
+        getSubjectProdSequence(campus, bigQuerySubject, semester),
       ]);
       const attendanceByTitle = new Map<
         string,
         { presentCount: number; totalCount: number }
       >();
       for (const subjectSession of sessions) {
-        if (!trackedSessionTitles.has(subjectSession.sessionTitle)) continue;
         const current = attendanceByTitle.get(subjectSession.sessionTitle) ?? {
           presentCount: 0,
           totalCount: 0,
@@ -461,11 +455,41 @@ router.get(
 
       const progress = await getRecoveryProgress(
         campus,
-        curriculumSubject,
+        recoverySubject ?? bigQuerySubject,
         topicsBelowThreshold,
       );
-      cacheSet(cacheKey, progress, 60 * 1000);
-      res.json(progress);
+      const completedSequence = prodSequence.filter((item) => item.completed);
+      const latestCompletion = completedSequence
+        .filter((item) => item.completedAt)
+        .sort((left, right) =>
+          String(right.completedAt).localeCompare(String(left.completedAt)),
+        )[0];
+      const topicsRecovered = Math.min(
+        progress.topicsRecovered,
+        topicsBelowThreshold,
+      );
+      const response = {
+        ...progress,
+        subject: bigQuerySubject,
+        totalTopics: prodSequence.length,
+        topicsRecovered,
+        topicsRemaining: Math.max(topicsBelowThreshold - topicsRecovered, 0),
+        recoveryCompletionPct:
+          topicsBelowThreshold > 0
+            ? Math.round((topicsRecovered / topicsBelowThreshold) * 1000) / 10
+            : 0,
+        sessionsHeld: completedSequence.length,
+        lastSession: latestCompletion
+          ? {
+              date: latestCompletion.completedAt!,
+              topics: completedSequence
+                .filter((item) => item.completedAt === latestCompletion.completedAt)
+                .map((item) => item.topicTitle),
+            }
+          : progress.lastSession,
+      };
+      cacheSet(cacheKey, response, 60 * 1000);
+      res.json(response);
     } catch (err) {
       req.log.error({ err }, "Error fetching recovery progress");
       res.status(500).json({ error: "Failed to fetch recovery progress" });
@@ -584,16 +608,10 @@ router.get(
       return;
     }
 
-    const curriculumSubject =
-      BIGQUERY_TO_CURRICULUM_SUBJECT[bigQuerySubject];
-    if (!curriculumSubject) {
-      res
-        .status(404)
-        .json({ error: "Recovery curriculum not configured for this subject" });
-      return;
-    }
+    const semester = q["semester"] || undefined;
+    const recoverySubject = BIGQUERY_TO_CURRICULUM_SUBJECT[bigQuerySubject];
 
-    const cacheKey = `session-tracker:${session.role}:${JSON.stringify(scope)}:${campus}:${bigQuerySubject}:${section ?? ""}`;
+    const cacheKey = `session-tracker:${session.role}:${JSON.stringify(scope)}:${campus}:${bigQuerySubject}:${section ?? ""}:${semester ?? ""}`;
     const cached = cacheGet<object>(cacheKey);
     if (cached) {
       res.json(cached);
@@ -601,21 +619,17 @@ router.get(
     }
 
     try {
-      const [sessions, trackedSessionTitles, deliveredTitles] = await Promise.all([
-        getSubjectSessions(scope, {
-          subject: bigQuerySubject,
-          campus,
-          section,
-        }),
-        getResolvedRecoverySessionTitles(campus, curriculumSubject),
-        getDeliveredTopicTitles(campus, bigQuerySubject),
-      ]);
+      const sessions = await getSubjectSessions(scope, {
+        subject: bigQuerySubject,
+        campus,
+        section,
+        semester,
+      });
       const attendanceByTitle = new Map<
         string,
         { presentCount: number; totalCount: number }
       >();
       for (const subjectSession of sessions) {
-        if (!trackedSessionTitles.has(subjectSession.sessionTitle)) continue;
         const current = attendanceByTitle.get(subjectSession.sessionTitle) ?? {
           presentCount: 0,
           totalCount: 0,
@@ -625,12 +639,13 @@ router.get(
         attendanceByTitle.set(subjectSession.sessionTitle, current);
       }
 
-      const tracker = await getSessionTracker(
+      const tracker = await getProdSequenceSessionTracker(
         campus,
-        curriculumSubject,
+        bigQuerySubject,
         attendanceByTitle,
         section,
-        deliveredTitles,
+        semester,
+        recoverySubject,
       );
       cacheSet(cacheKey, tracker, 60 * 1000);
       res.json(tracker);

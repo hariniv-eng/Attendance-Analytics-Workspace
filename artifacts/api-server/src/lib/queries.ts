@@ -696,11 +696,14 @@ export async function getSubjectSessions(
     subject: string;
     campus?: string;
     section?: string;
+    semester?: string;
     dateRange?: DateRangeFilter;
   },
 ): Promise<SessionSummaryItem[]> {
   const params: Record<string, unknown> = { subject: opts.subject };
-  const where = scopeClause(scope, params) + dateRangeClause(opts.dateRange, params);
+  const where =
+    scopeClause(scope, params, { semester: opts.semester }) +
+    dateRangeClause(opts.dateRange, params);
   let extra = " AND subject_title = @subject";
   if (opts.campus) {
     params["campus"] = opts.campus;
@@ -914,12 +917,15 @@ export async function getSubjectProdSequence(
   campus: string,
   subject: string,
   semester?: string,
+  section?: string,
 ): Promise<SubjectProdSequenceItem[]> {
   const params: Record<string, unknown> = { campus, subject };
   const semesterClause = semester
     ? "semester_title = @semester"
     : "is_current_semester = 1";
+  const sectionClause = section ? "AND section_name = @section" : "";
   if (semester) params["semester"] = semester;
+  if (section) params["section"] = section;
 
   const rows = await bqQuery<{
     session_id: string;
@@ -954,6 +960,7 @@ export async function getSubjectProdSequence(
      WHERE institute_name = @campus
        AND course_title = @subject
        AND ${semesterClause}
+       ${sectionClause}
        AND session_id IS NOT NULL
        AND session_title IS NOT NULL
      GROUP BY session_id
@@ -1453,6 +1460,7 @@ export interface RecoveryProgressSummary {
 
 export type SessionTrackerStatus =
   | "not_taught"
+  | "completed"
   | "ok"
   | "needs_recovery"
   | "recovery_scheduled"
@@ -1467,6 +1475,8 @@ export interface SessionTrackerRow {
   presentCount: number | null;
   totalCount: number | null;
   status: SessionTrackerStatus;
+  prodStatus: "pending" | "completed";
+  completedAt: string | null;
   recoverySession: {
     id: string;
     date: string;
@@ -1736,6 +1746,8 @@ export async function getSessionTracker(
       presentCount: hasAttendance ? attendance!.presentCount : null,
       totalCount: hasAttendance ? attendance!.totalCount : null,
       status,
+      prodStatus: delivered ? "completed" : "pending",
+      completedAt: null,
       recoverySession: recovery
         ? {
             id: recovery.id,
@@ -1745,6 +1757,77 @@ export async function getSessionTracker(
             wasCovered: recovery.wasCovered,
           }
         : null,
+    };
+  });
+}
+
+/**
+ * Builds the tracker from the live production schedule rather than requiring
+ * a Postgres recovery curriculum. Recovery metadata is overlaid when the
+ * subject has a seeded recovery curriculum, but the production rows are the
+ * source of truth for every college and subject.
+ */
+export async function getProdSequenceSessionTracker(
+  campus: string,
+  subject: string,
+  attendanceByTitle: ReadonlyMap<string, RecoveryTopicAttendance>,
+  section?: string,
+  semester?: string,
+  recoverySubject?: string,
+): Promise<SessionTrackerRow[]> {
+  const sequence = await getSubjectProdSequence(
+    campus,
+    subject,
+    semester,
+    section,
+  );
+  const recoveryRows = recoverySubject
+    ? await getSessionTracker(
+        campus,
+        recoverySubject,
+        attendanceByTitle,
+        section,
+      )
+    : [];
+  const recoveryByTitle = new Map(
+    recoveryRows.map((row) => [row.topicTitle, row]),
+  );
+
+  return sequence.map((item) => {
+    const attendance = attendanceByTitle.get(item.topicTitle);
+    const attendancePct =
+      attendance && attendance.totalCount > 0
+        ? Math.round((attendance.presentCount / attendance.totalCount) * 1000) /
+          10
+        : null;
+    const recovery = recoveryByTitle.get(item.topicTitle);
+    let status: SessionTrackerStatus;
+    if (!item.completed) {
+      status = "not_taught";
+    } else if (attendancePct === null) {
+      status = "completed";
+    } else if (attendancePct >= 80) {
+      status = "ok";
+    } else if (recovery?.status === "recovered") {
+      status = "recovered";
+    } else if (recovery?.status === "recovery_scheduled") {
+      status = "recovery_scheduled";
+    } else {
+      status = "needs_recovery";
+    }
+
+    return {
+      sequenceNo: item.order,
+      weekNo: item.week,
+      topicTitle: item.topicTitle,
+      unitId: recovery?.unitId ?? null,
+      attendancePct,
+      presentCount: attendance?.presentCount ?? null,
+      totalCount: attendance?.totalCount ?? null,
+      status,
+      prodStatus: item.completed ? "completed" : "pending",
+      completedAt: item.completedAt,
+      recoverySession: recovery?.recoverySession ?? null,
     };
   });
 }

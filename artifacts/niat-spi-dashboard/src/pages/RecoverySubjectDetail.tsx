@@ -95,7 +95,9 @@ interface SessionTrackerRow {
   attendancePct: number | null;
   presentCount: number | null;
   totalCount: number | null;
-  status: "not_taught" | "ok" | "needs_recovery" | "recovery_scheduled" | "recovered";
+  status: "not_taught" | "completed" | "ok" | "needs_recovery" | "recovery_scheduled" | "recovered";
+  prodStatus: "pending" | "completed";
+  completedAt: string | null;
   recoverySession: {
     id: string;
     date: string;
@@ -156,6 +158,8 @@ function getStatusDisplay(status: SessionTrackerRow["status"]) {
   switch (status) {
     case "not_taught":
       return { label: "Not Taught", className: "bg-slate-50 text-slate-600 border-slate-200" };
+    case "completed":
+      return { label: "Completed", className: "bg-blue-50 text-blue-700 border-blue-200" };
     case "ok":
       return { label: "OK", className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
     case "needs_recovery":
@@ -814,6 +818,7 @@ export default function RecoverySubjectDetail() {
           campus: campus!,
           subject: subject!,
         });
+        if (semester) queryParams.set("semester", semester);
         const response = await fetch(`/api/dashboard/recovery-progress?${queryParams}`, {
           signal: controller.signal,
         });
@@ -891,6 +896,7 @@ export default function RecoverySubjectDetail() {
           campus: campus!,
           subject: subject!,
         });
+        if (semester) queryParams.set("semester", semester);
         const response = await fetch(`/api/dashboard/session-tracker?${queryParams}`, {
           signal: controller.signal,
         });
@@ -914,7 +920,7 @@ export default function RecoverySubjectDetail() {
       active = false;
       controller.abort();
     };
-  }, [campus, subject]);
+  }, [campus, semester, subject]);
 
   const filteredStudents = useMemo(() => {
     if (!selectedSubjectData) return [];
@@ -1370,6 +1376,11 @@ export default function RecoverySubjectDetail() {
                             <span className={`inline-flex items-center px-2 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border ${statusDisplay.className}`}>
                               {statusDisplay.label}
                             </span>
+                            {row.prodStatus === "completed" && (
+                              <span className="mt-1 block text-[11px] font-medium text-blue-700">
+                                Prod completed{row.completedAt ? ` · ${formatRecoveryDate(row.completedAt)}` : ""}
+                              </span>
+                            )}
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap">
                             {row.recoverySession ? (
